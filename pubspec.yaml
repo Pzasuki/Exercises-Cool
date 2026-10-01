@@ -1,0 +1,46 @@
+name: exercises_app
+description: "动作库 — 健身动作浏览应用（由 www/ 网页版重构的 Flutter 版本）。"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.1.2
+  shared_preferences: ^2.5.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.6
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/data/exercises.json
+    - assets/images/
+    - assets/videos/
+
+flutter_launcher_icons:
+  android: true
+  image_path: assets/icon/app_icon.png
+  adaptive_icon_background: "#FF4F00"
+  adaptive_icon_foreground: assets/icon/app_icon_foreground.png
+  min_sdk_android: 21
+
+flutter_native_splash:
+  android: true
+  web: false
+  color: "#f4f4f5"
+  image: assets/icon/app_icon_splash.png
+  android_12:
+    color: "#f4f4f5"
+    image: assets/icon/app_icon_splash.png
+  fullscreen: false
