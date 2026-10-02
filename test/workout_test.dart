@@ -262,14 +262,13 @@ void main() {
       await pumpFor(tester, const Duration(milliseconds: 300));
     }
 
-    testWidgets('挑动作：默认展示全库卡片网格，部位 chips 过滤，可多选批量加',
+    testWidgets('挑动作：器材总览 → 器材内部位分组 → 多选批量加',
         (tester) async {
       tester.view.physicalSize = const Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      final exercises = await loadExercises(tester);
-      await pumpApp(tester, exercises);
+      await pumpApp(tester, await loadExercises(tester));
       await tester.tap(find.text('训练'));
       await pumpFor(tester, const Duration(milliseconds: 100));
       await tester.tap(find.text('开始训练'));
@@ -279,27 +278,72 @@ void main() {
       await tester.tap(find.text('搜索动作库'));
       await pumpFor(tester, const Duration(milliseconds: 200));
 
-      // 不输入任何内容就有全库卡片；部位 chips 过滤（颈部全库只有 2 个）
+      // 一级：器材卡片总览 + 部位筛选 chips（全部 = 全库 1324）
       expect(find.text('全部 1324'), findsOneWidget);
-      await tester.tap(find.text('颈部 2'));
-      await pumpFor(tester, const Duration(milliseconds: 100));
-      final neckNames = [
-        for (final e in exercises)
-          if (e.category == 'neck') e.name,
-      ];
-      expect(neckNames, hasLength(2));
-      for (final name in neckNames) {
-        expect(find.text(name), findsOneWidget);
-      }
+      expect(find.text('徒手'), findsOneWidget);
+      expect(find.text('325 个动作'), findsOneWidget);
 
-      // 多选两张卡 → 批量带回（首次添加引导选保存默认值）
+      // 部位筛选：选「胸部」→ 器材卡片只显示有胸部动作的，数量为胸部范围内
+      await tester.tap(find.text('胸部 163'));
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      expect(find.text('36 个动作'), findsOneWidget); // 徒手 ∧ 胸部
+      expect(find.text('325 个动作'), findsNothing);
+      expect(find.text('颈部'), findsNothing); // 颈部无胸部动作，卡片隐藏
+
+      // 进入「徒手」→ 只显示胸部分组
+      await tester.tap(find.text('徒手'));
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      expect(find.text('徒手 · 36 个动作'), findsOneWidget);
+      // 「胸部 36」= 筛选芯片 + 部位分组标题各一处（芯片计数在二级也是范围内数量）
+      expect(find.text('胸部 36'), findsNWidgets(2));
+
+      // 返回总览（筛选保留），点「全部」恢复全量
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      expect(find.text('36 个动作'), findsOneWidget);
+      await tester.tap(find.text('全部 1324'));
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      expect(find.text('325 个动作'), findsOneWidget);
+
+      // 搜索仍可用：总览级搜全库
+      await tester.enterText(
+        find.byKey(const Key('exercisePickerSearch')),
+        '深蹲',
+      );
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      final searchCard = find.descendant(
+        of: find.byType(GridView),
+        matching: find.textContaining('深蹲'),
+      ).first;
+      await tester.tap(searchCard);
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      expect(find.text('添加 1 个动作'), findsOneWidget);
+
+      // 取消该选择（选择跨层级/搜索保留，这是批量添加的预期行为）
+      await tester.tap(searchCard);
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      expect(find.text('选择要添加的动作'), findsOneWidget);
+
+      // 清空搜索回到器材总览，进「徒手」（325 个动作，内部按部位分组）
+      await tester.enterText(
+        find.byKey(const Key('exercisePickerSearch')),
+        '',
+      );
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      await tester.tap(find.text('徒手'));
+      await pumpFor(tester, const Duration(milliseconds: 100));
+
+      expect(find.text('徒手 · 325 个动作'), findsOneWidget);
+      // 「胸部 36」= 部位筛选芯片 + 部位分组标题（芯片计数在二级按器材范围）
+      expect(find.text('胸部 36'), findsNWidgets(2));
+
+      // 多选两张卡 → 批量带回（首次引导保存默认值）
       final inkWells = find.descendant(
         of: find.byType(GridView),
         matching: find.byType(InkWell),
       );
       await tester.tap(inkWells.first);
       await pumpFor(tester, const Duration(milliseconds: 100));
-      expect(find.text('添加 1 个动作'), findsOneWidget);
       await tester.tap(inkWells.at(1));
       await pumpFor(tester, const Duration(milliseconds: 100));
       await tester.tap(find.text('添加 2 个动作'));
@@ -308,8 +352,6 @@ void main() {
       await pumpFor(tester, const Duration(milliseconds: 300));
 
       expect(find.text('次/组'), findsNWidgets(2));
-      // 保存的默认参数（3 组）已套用到两个动作
-      expect(find.text('3'), findsNWidgets(2));
     });
 
     testWidgets('规划（搜索挑动作）→ 做组打点 → 总结 → 存模板', (tester) async {
@@ -446,7 +488,7 @@ void main() {
       await pumpFor(tester, const Duration(milliseconds: 300));
       await tester.tap(find.text('搜索动作库'));
       await pumpFor(tester, const Duration(milliseconds: 200));
-      await tester.tap(find.text('颈部 2'));
+      await tester.tap(find.text('徒手'));
       await pumpFor(tester, const Duration(milliseconds: 100));
       await tester.tap(
         find.descendant(

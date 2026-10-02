@@ -7,6 +7,7 @@ import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'data/models/exercise.dart';
 import 'data/repositories/exercise_repository.dart';
+import 'services/rest_alarm_service.dart';
 import 'state/favorites_service.dart';
 import 'state/library_controller.dart';
 import 'state/workout_controller.dart';
@@ -70,13 +71,18 @@ class _ExerciseBootstrapState extends State<ExerciseBootstrap> {
         if (snapshot.hasError) {
           return _BootstrapError(error: snapshot.error!, onRetry: _retry);
         }
+        final workoutController = WorkoutController();
+        // 组间倒计时桥接到系统通知（常驻倒计时 + 到点闹钟提醒）
+        RestAlarmBridge(workoutController);
         return MultiProvider(
           providers: [
             ChangeNotifierProvider(
               create: (_) => LibraryController(snapshot.data!),
             ),
             ChangeNotifierProvider(create: (_) => FavoritesService()),
-            ChangeNotifierProvider(create: (_) => WorkoutController()),
+            ChangeNotifierProvider<WorkoutController>.value(
+              value: workoutController,
+            ),
           ],
           child: const ExercisesApp(),
         );

@@ -181,8 +181,10 @@ class _FavoritePickerTab extends StatelessWidget {
   }
 }
 
-/// 搜索页签：默认按部位分类展示全库动作（类似主界面），
-/// 搜索框可叠加检索（searchIndex），与动作库页面的筛选状态无关。
+/// 搜索动作库页签：两级结构，按**器材**分类——
+/// 一级：器材卡片总览（含代表图与数量，徒手/哑铃/拉索/杠铃…）；
+/// 二级：该器材内按**部位**分组的模块（胸部/背部/…）。
+/// 搜索框在两级都可用：总览级搜全库，器材级只搜该器材。
 class _SearchPickerTab extends StatefulWidget {
   const _SearchPickerTab({
     required this.selected,
@@ -197,26 +199,45 @@ class _SearchPickerTab extends StatefulWidget {
 }
 
 class _SearchPickerTabState extends State<_SearchPickerTab> {
-  String _query = '';
+  /// 选中的器材分类，null = 器材总览。
+  String? _equipment;
 
-  /// 选中的部位分类，null = 全部。
-  String? _category;
+  /// 部位筛选（chips 行），null = 全部部位；两级通用。
+  String? _categoryFilter;
+  String _query = '';
 
   @override
   Widget build(BuildContext context) {
     final library = context.watch<LibraryController>();
     final q = _query.trim().toLowerCase();
-    final results = library.allExercises
-        .where(
-          (e) =>
-              (_category == null || e.category == _category) &&
-              (q.isEmpty || e.searchIndex.contains(q)),
-        )
-        .toList(growable: false);
+
+    // 当前层级的动作全集：总览 = 全库，器材级 = 该器材
+    final all = _equipment == null
+        ? library.allExercises
+        : [
+            for (final e in library.allExercises)
+              if (e.equipment == _equipment) e,
+          ];
+    // 部位筛选叠加（全部 = 不过滤）
+    final scoped = _categoryFilter == null
+        ? all
+        : [
+            for (final e in all)
+              if (e.category == _categoryFilter) e,
+          ];
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (_equipment != null)
+          _CategoryHeader(
+            name: zh(_equipment!),
+            count: scoped.length,
+            onBack: () => setState(() {
+              _equipment = null;
+              _query = '';
+            }),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
           child: TextField(
@@ -229,7 +250,7 @@ class _SearchPickerTabState extends State<_SearchPickerTab> {
             ),
           ),
         ),
-        // 部位分类 chips（与主界面同一套固定顺序 + 全库计数）
+        // 部位筛选 chips（两级通用；0 结果的芯片隐藏，已选中的保留）
         SizedBox(
           height: 40,
           child: ListView(
@@ -237,31 +258,227 @@ class _SearchPickerTabState extends State<_SearchPickerTab> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
             children: [
               _CategoryChip(
-                label: '全部 ${library.totalCount}',
-                selected: _category == null,
-                onTap: () => setState(() => _category = null),
+                label: '全部 ${all.length}',
+                selected: _categoryFilter == null,
+                onTap: () => setState(() => _categoryFilter = null),
               ),
-              for (final c in library.categoryOrder) ...[
-                const SizedBox(width: 6),
-                _CategoryChip(
-                  label: '${zh(c)} ${library.categoryCounts[c] ?? 0}',
-                  selected: _category == c,
-                  onTap: () => setState(() => _category = c),
-                ),
-              ],
+              for (final cat in library.categoryOrder)
+                if (_categoryFilter == cat ||
+                    all.any((e) => e.category == cat)) ...[
+                  const SizedBox(width: 6),
+                  _CategoryChip(
+                    label:
+                        '${zh(cat)} ${all.where((e) => e.category == cat).length}',
+                    selected: _categoryFilter == cat,
+                    onTap: () => setState(() => _categoryFilter = cat),
+                  ),
+                ],
             ],
           ),
         ),
-        Expanded(
-          child: results.isEmpty
-              ? const _PickerHint(text: '未找到相关动作')
-              : _PickerGrid(
-                  exercises: results,
-                  selected: widget.selected,
-                  onToggle: widget.onToggle,
-                ),
-        ),
+        Flexible(child: _buildContent(library, q, scoped)),
       ],
+    );
+  }
+
+  Widget _buildContent(
+      LibraryController library, String q, List<Exercise> scoped) {
+    // 搜索优先：有输入时直接展示结果网格（忽略器材分组）
+    if (q.isNotEmpty) {
+      final results = scoped
+          .where((e) => e.searchIndex.contains(q))
+          .toList(growable: false);
+      return results.isEmpty
+          ? const _PickerHint(text: '未找到相关动作')
+          : _PickerGrid(
+              exercises: results,
+              selected: widget.selected,
+              onToggle: widget.onToggle,
+            );
+    }
+
+    // 一级：器材卡片总览（部位筛选后数量为该部位范围内的，0 结果的器材隐藏）
+    if (_equipment == null) {
+      final equipmentList =
+          library.filterValues[FilterKey.equipment] ?? const <String>[];
+      final visibleEquipment = [
+        for (final eq in equipmentList)
+          if (scoped.where((e) => e.equipment == eq) case final list
+              when list.isNotEmpty)
+            (eq, list.length),
+      ];
+      return GridView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 220,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 1.0,
+        ),
+        itemCount: visibleEquipment.length,
+        itemBuilder: (context, index) {
+          final (eq, count) = visibleEquipment[index];
+          return _PickerCategoryCard(
+            category: eq,
+            count: count,
+            representative: library.equipmentRepresentative[eq],
+            onTap: () => setState(() {
+              _equipment = eq;
+              _query = '';
+            }),
+          );
+        },
+      );
+    }
+
+    // 二级：按部位分组的模块（固定业务顺序；部位筛选后只剩选中的组）
+    final sections = <(String, List<Exercise>)>[];
+    for (final cat in library.categoryOrder) {
+      final list =
+          scoped.where((e) => e.category == cat).toList(growable: false);
+      if (list.isNotEmpty) sections.add((cat, list));
+    }
+    if (sections.isEmpty) return const _PickerHint(text: '未找到相关动作');
+
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 8),
+      children: [
+        for (final (eq, list) in sections) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
+            child: Text(
+              '${zh(eq)} ${list.length}',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          _PickerGrid(
+            exercises: list,
+            selected: widget.selected,
+            onToggle: widget.onToggle,
+            shrinkWrap: true,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// 二级页头部：返回 + 部位名 + 数量。
+class _CategoryHeader extends StatelessWidget {
+  const _CategoryHeader({
+    required this.name,
+    required this.count,
+    required this.onBack,
+  });
+
+  final String name;
+  final int count;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 8, 14, 0),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onBack,
+            icon: const Icon(
+              Icons.arrow_back_rounded,
+              size: 20,
+              color: AppColors.textSecondary,
+            ),
+            splashRadius: 20,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '$name · $count 个动作',
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 部位卡片（类似主页总览）：代表图 + 名称 + 数量。
+class _PickerCategoryCard extends StatelessWidget {
+  const _PickerCategoryCard({
+    required this.category,
+    required this.count,
+    required this.representative,
+    required this.onTap,
+  });
+
+  final String category;
+  final int count;
+  final Exercise? representative;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final rep = representative;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: AppColors.bgSurface,
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: rep == null
+                  ? const ColoredBox(color: AppColors.bgElevated)
+                  : Image.asset(
+                      rep.thumbnailAsset,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) =>
+                          const ColoredBox(color: AppColors.bgElevated),
+                    ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 7),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    zh(category),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$count 个动作',
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -272,16 +489,22 @@ class _PickerGrid extends StatelessWidget {
     required this.exercises,
     required this.selected,
     required this.onToggle,
+    this.shrinkWrap = false,
   });
 
   final List<Exercise> exercises;
   final Set<String> selected;
   final _SelectionCallback onToggle;
 
+  /// true = 嵌入外层滚动（器材分组模块），自身不滚动。
+  final bool shrinkWrap;
+
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      padding: EdgeInsets.fromLTRB(12, 0, 12, shrinkWrap ? 8 : 8),
+      shrinkWrap: shrinkWrap,
+      physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 220,
         mainAxisSpacing: 8,
@@ -399,6 +622,7 @@ class _PickCard extends StatelessWidget {
   }
 }
 
+/// 部位筛选芯片（与主页筛选一致的胶囊样式）。
 class _CategoryChip extends StatelessWidget {
   const _CategoryChip({
     required this.label,

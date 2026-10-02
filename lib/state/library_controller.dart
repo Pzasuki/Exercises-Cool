@@ -75,6 +75,10 @@ class LibraryController extends ChangeNotifier {
   /// id → 动作（收藏夹/训练清单按 id 引用动作，展示时反查）。
   late final Map<String, Exercise> exerciseById;
 
+  /// 器材 → 全库数量 / 代表动作（挑动作总览的器材卡片用）。
+  late final Map<String, int> equipmentCounts;
+  late final Map<String, Exercise> equipmentRepresentative;
+
   /// 按 id 查动作；不存在（数据更新后被移除）时返回 null。
   Exercise? byId(String id) => exerciseById[id];
 
@@ -257,6 +261,16 @@ class LibraryController extends ChangeNotifier {
     exerciseById = Map.unmodifiable({
       for (final e in _exercises) e.id: e,
     });
+
+    // 器材索引（挑动作弹层的一级分类）
+    final equipCounts = <String, int>{};
+    final equipReps = <String, Exercise>{};
+    for (final e in _exercises) {
+      equipCounts[e.equipment] = (equipCounts[e.equipment] ?? 0) + 1;
+      equipReps.putIfAbsent(e.equipment, () => e);
+    }
+    equipmentCounts = Map.unmodifiable(equipCounts);
+    equipmentRepresentative = Map.unmodifiable(equipReps);
     categoryOrder = (counts.keys.toList()
           ..sort((a, b) {
             final byRank = _categoryRank(a).compareTo(_categoryRank(b));
