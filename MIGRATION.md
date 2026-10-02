@@ -151,12 +151,116 @@ Flutter 项目位于**仓库根目录**（`lib/`、`assets/`、android/）。
    分类页形态下整个结果条不再渲染；计数移到快捷行状态行右侧
    （「全部 N」与右侧 N / 1324 均实时反映筛选结果）。「全部动作」视图的
    结果条（徽章 + 清除全部 + 计数）保持原样；快捷行在单肌群分类下只显示计数。
+10. **系统返回键与搜索状态**（需求调整，`PopScope`）：
+   - 主页搜索态：返回被拦截（canPop=false）→ 清除搜索回到分类总览，
+     再次返回才走系统默认（退出应用）；
+   - 分类页带搜索词：键盘打开时首次返回由系统收起键盘（文本保留），
+     路由 pop 回主页时清除搜索（`onPopInvokedWithResult`），主页回到
+     分类总览而非残留的搜索结果。
+   注意测试断言：`handlePopRoute()` 返回值语义是「返回事件是否被消费」，
+   PopScope 拦截时同样返回 true（应用不退出）；pop 转场约 300ms，断言前需
+   泵 ≥800ms 等旧路由出树。
+11. **代码审查修复**（2026-10，全量回归通过）：
+   - 分类筛选残留（逻辑 bug）：浏览页返回主页由「只清搜索」改为
+     `returnToOverview()`（清搜索 + 分类残留）。此前残留分类会把主页搜索
+     隐性过滤（实测：胸部残留时搜「深蹲」得 0 / 1324，全库实际 71），而
+     结果条又被 hasSingleCategory 隐藏，用户看不到任何提示；器材/目标筛选
+     保留，回主页搜索时以徽章形式可见生效。
+   - 启动流程：`runApp` 先出加载态，数据读取+解析在 UI 就绪后进行（原先
+     await 在 runApp 之前，低端机启动白屏可感知）；错误页增加「重试」。
+     `ExerciseBootstrap` 支持注入 loader 供测试。
+   - 搜索词语义拆分：`search`（原文，输入框回显同步用）与 `activeQuery`
+     （trim 后生效词，筛选匹配与搜索态判定）——纯空白输入不再进入搜索态。
+   - `Exercise.searchIndex` 缓存为 `late final`（构造函数相应去 const，
+     全库无 const 用法），避免每次筛选变化对全库重复拼串。
+   - 测试 32 → 36 项（新增启动引导 2 项、分类残留回归 1 项、空白搜索
+     1 项），`flutter analyze` 0 issue。
 
 测试 16 → 30 项（新增 `overview_test.dart` 两级浏览 6 项、facet/enterCategory/
 分类索引等状态层 4 项、长按预览 1 项），`flutter analyze` 0 issue。
 
 > 设计取舍：从总览进入分类会**重置**其他筛选（每次进入都是干净浏览态）；
 > 总览搜索结果不带侧栏，筛选需清搜索后从部位进入（暂定，若高频再议）。
+
+### 阶段9 收藏与训练 ✅ 已完成（需求调整）
+
+新增两大功能，入口采用**底部 3 Tab**（`features/home/home_shell.dart`，
+IndexedStack 保持各 Tab 状态）：动作库（原总览+浏览两级）/ 训练 / 收藏。
+
+1. **收藏夹**（`state/favorites_service.dart`）：
+   - 模型 `FavoriteFolder{id, name, exerciseIds}`，持久化到
+     shared_preferences（键 `favoriteFolders`，JSON）；存储不可用退化为内存态；
+   - 收藏入口在**详情弹窗**：标题旁心形按钮（已收藏实心主题色）→
+     收藏夹选择弹层（`features/favorites/folder_picker_sheet.dart`），
+     勾选/取消多个收藏夹即时生效，可当场新建；
+   - 收藏 Tab：收藏夹列表（新建/重命名/删除）→ 夹内动作列表
+     （查看详情 / 从夹内移除）；
+   - id 生成 = 时间戳 + 自增序号（纯时间戳在同一微秒内会撞 id，
+     曾导致多夹收藏互相覆盖的 bug）。
+2. **训练做组计数**（`state/workout_controller.dart` + `features/workout/`）：
+   - 状态机 idle（模板列表 + 开始入口）→ planning（挑动作、组数×次数步进器、
+     排序/删除、组间倒计时开关+秒数 ±15）→ running（逐动作做组打点：
+     组进度圆点、「完成一组」；做完自动切下一个动作；组间可选倒计时大字 +
+     +15s / 跳过；支持跳过动作、提前结束）→ finished（总结：动作数/组数，
+     可存为模板）→ idle；
+   - 挑动作弹层（`exercise_picker_sheet.dart`）：「收藏」页签（收藏夹横滑
+     选择 + 夹内动作）/「搜索动作库」页签（本地检索全库，不干扰页面筛选状态），
+     点选返回动作 id。**注意：不用 TabBarView**——底部弹层内嵌 PageView 的
+     手势竞技场会吞掉列表点击（点击命中但不响应），改用 SegmentedButton 切换；
+   - 模板 `WorkoutTemplate{id, name, entries, createdAt}` 持久化（键
+     `workoutTemplates`），可加载为规划清单再调整；
+   - 间歇倒计时默认**关闭**，开启后默认 60s，±15s 调节；倒计时由控制器的
+     `Timer.periodic` 驱动（单测用 fake_async 验证自动结束）。
+3. **配套**：`LibraryController` 增加 `exerciseById`（id → 动作反查）与
+   `allExercises`（全库只读，供挑动作搜索）；`main.dart` 的 bootstrap 在
+   数据就绪后挂三个 provider（LibraryController / FavoritesService /
+   WorkoutController）。
+
+测试 36 → 48 项（新增 favorites/workout 服务层单测与组件测试），
+`flutter analyze` 0 issue。
+
+### 阶段10 训练功能完善 ✅ 已完成（需求调整）
+
+1. **组间倒计时改分钟制**：规划页步进 1~10 分钟（1 分钟起，`setRestMinutes`
+   钳位），内部仍以秒驱动倒计时；执行中 +15s 微调保留，倒计时展示 mm:ss。
+2. **挑动作弹层默认有内容**：「搜索动作库」页签不再空白——默认列出全库动作，
+   顶部新增部位分类 chips（与主界面同一套 `kCategoryDisplayOrder` 顺序 +
+   全库计数），搜索词与部位筛选叠加生效。
+3. **规划卡片溢出修复**（附图问题）：组/次/重量控制行改用 Wrap 兜底，
+   图标按钮收紧为 32px 点击区（`_MiniIconButton`），排序箭头改为
+   上下纵排，窄屏不再出现 RIGHT OVERFLOWED。
+4. **训练重量（kg，可选）**：`PlanEntry/SessionEntry/WorkoutRecordEntry`
+   增加 `weight`（null = 未设置）；规划卡片的重量步进从「+」起 10kg、
+   ±2.5kg、减到底回未设置；执行页与历史明细展示重量。
+5. **训练感受**：总结页新增「轻松/刚好/有点累/很累」选择（默认刚好），
+   点「完成」随记录写入历史。
+6. **历史训练**：`WorkoutRecord{date, duration, feeling, entries}` 持久化
+   （键 `workoutHistory`）；训练起始页新增「历史训练」区，卡片显示
+   日期/动作数/组数/感受/时长，可展开看动作明细（组数/次数/重量），可删除。
+   只有实际完成组数 > 0 的动作才写入记录。
+
+测试 48 → 53 项（分钟制钳位 / 重量设置清空 / 历史写入删除 /
+弹层默认列表与分类过滤 / 全流程含重量与感受）。
+
+### 阶段11 收藏默认列表与训练默认参数 ✅ 已完成（需求调整）
+
+1. **默认收藏列表**：`FavoritesService` 内置「默认收藏」夹（id `default`，
+   加载时保证存在，**不可重命名/删除**）。详情弹窗心形按钮**点按 = 直接收进
+   默认收藏**（不弹层）；**长按 = 打开收藏夹选择弹层**（含默认收藏行，
+   可多选/新建）。收藏页默认夹排首位且不显示管理菜单。
+2. **挑动作弹层改卡片网格 + 多选**：两个页签均为 2 列图片卡片
+   （缩略图 + 名称 + 标签，选中右上角打勾），`showExercisePicker` 改返回
+   `List<String>`，底部「添加 N 个动作」批量带回；选中状态两页签共享。
+3. **首次添加引导默认参数**：`WorkoutController` 增加用户默认
+   组数/次数/重量（键 `workoutDefaults`，未配置时首次添加动作后弹窗引导，
+   可跳过=保持 3 组 × 10 次且不再提示）；保存后**同步套用当前清单**并用于
+   之后所有 `addExercise`；弹窗控件复用规划卡片的步进器。
+   `addExercise` 改用用户默认值（原先写死 3 × 10）。
+
+测试 53 → 56 项（默认夹语义 / 弹层网格与批量加 / 默认参数引导与持久化）。
+另：测试助手 pumpApp 用 `tester.runAsync` 放行真实异步，解决
+SharedPreferences 在 FakeAsync 环境下加载不完成导致的服务态不确定问题；
+finder 对非选中 IndexedStack 子树会跳过（视为离台），涉及跨 Tab 断言时注意。
 
 ### 阶段7 数据与体积优化（可选）
 
@@ -172,7 +276,7 @@ Flutter 项目位于**仓库根目录**（`lib/`、`assets/`、android/）。
 ```bash
 flutter run                # 连接的安卓设备/模拟器
 flutter analyze            # 静态检查（当前 0 issue）
-flutter test               # 单元+组件测试（当前 30 项全过）
+flutter test               # 单元+组件测试（当前 56 项全过）
 flutter build apk --release --split-per-abi
 ```
 

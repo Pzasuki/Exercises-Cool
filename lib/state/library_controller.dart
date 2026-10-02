@@ -43,6 +43,8 @@ class LibraryController extends ChangeNotifier {
   final List<Exercise> _exercises;
   Timer? _debounce;
 
+  /// 搜索框原文（未 trim）：供输入框回显同步，避免打字途中的尾随空格被回写。
+  /// 筛选匹配与「是否处于搜索态」判定一律走 [activeQuery]。
   String _search = '';
   final Set<String> _categoryFilter = {};
   final Set<String> _equipmentFilter = {};
@@ -70,10 +72,19 @@ class LibraryController extends ChangeNotifier {
   /// 分类 → 该分类下的目标肌群（按全量数量降序），分类页快捷行用。
   late final Map<String, List<String>> categoryTargets;
 
+  /// id → 动作（收藏夹/训练清单按 id 引用动作，展示时反查）。
+  late final Map<String, Exercise> exerciseById;
+
+  /// 按 id 查动作；不存在（数据更新后被移除）时返回 null。
+  Exercise? byId(String id) => exerciseById[id];
+
   /// 总览页分类卡片的展示顺序（固定业务顺序，见 [kCategoryDisplayOrder]）。
   late final List<String> categoryOrder;
 
   List<Exercise> get filtered => _filtered;
+
+  /// 全库动作（只读）。训练挑动作等场景直接检索全库，不走页面筛选。
+  List<Exercise> get allExercises => _exercises;
 
   /// 当前应展示的条目（无限滚动分页窗口）。
   List<Exercise> get visibleExercises =>
@@ -81,13 +92,19 @@ class LibraryController extends ChangeNotifier {
 
   bool get hasMore => _visibleCount < _filtered.length;
   int get totalCount => _exercises.length;
+
+  /// 搜索框原文（未 trim，输入框回显同步用）。
   String get search => _search;
+
+  /// 生效搜索词（trim 后）：筛选匹配与搜索态判定都以此为准，
+  /// 纯空白输入不构成搜索。
+  String get activeQuery => _search.trim();
 
   bool get hasActiveFilters =>
       _categoryFilter.isNotEmpty ||
       _equipmentFilter.isNotEmpty ||
       _targetFilter.isNotEmpty ||
-      _search.isNotEmpty;
+      activeQuery.isNotEmpty;
 
   /// 已选筛选条件总数（不含搜索，对应窄屏按钮上的 #sidebar-toggle-count）。
   int get activeFilterCount =>
@@ -150,6 +167,17 @@ class LibraryController extends ChangeNotifier {
     _applyFilters();
   }
 
+  /// 从浏览页返回总览页（LibraryScreen 的 PopScope 回调）：
+  /// 清除搜索并清掉分类残留——分类不清会让主页搜索被残留分类隐性过滤，
+  /// 而结果条又被 hasSingleCategory 隐藏，用户看不到任何提示。
+  /// 器材/目标筛选保留：回主页搜索时它们会以徽章形式可见地生效。
+  void returnToOverview() {
+    _debounce?.cancel();
+    _search = '';
+    _categoryFilter.clear();
+    _applyFilters();
+  }
+
   /// 清空搜索与全部筛选（对应 clearAllFilters）。
   void clearAllFilters() {
     _debounce?.cancel();
@@ -184,7 +212,7 @@ class LibraryController extends ChangeNotifier {
 
   /// 忽略 [key] 维度筛选后的结果数（快捷行的「全部」芯片计数）。
   int countWithout(FilterKey key) {
-    final q = _search.toLowerCase().trim();
+    final q = activeQuery.toLowerCase();
     var count = 0;
     for (final e in _exercises) {
       if (_matches(e, q, except: key)) count++;
@@ -226,6 +254,9 @@ class LibraryController extends ChangeNotifier {
     }
     categoryCounts = Map.unmodifiable(counts);
     categoryRepresentative = Map.unmodifiable(representatives);
+    exerciseById = Map.unmodifiable({
+      for (final e in _exercises) e.id: e,
+    });
     categoryOrder = (counts.keys.toList()
           ..sort((a, b) {
             final byRank = _categoryRank(a).compareTo(_categoryRank(b));
@@ -263,7 +294,7 @@ class LibraryController extends ChangeNotifier {
   }
 
   void _applyFilters({bool notify = true}) {
-    final q = _search.toLowerCase().trim();
+    final q = activeQuery.toLowerCase();
     _filtered = _exercises
         .where((e) => _matches(e, q))
         .toList(growable: false);

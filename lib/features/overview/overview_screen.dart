@@ -53,20 +53,29 @@ class _OverviewScreenState extends State<OverviewScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<LibraryController>();
-    final searching = controller.search.isNotEmpty;
+    // 搜索态判定用 trim 后的生效词：纯空白输入不切换到结果视图
+    final searching = controller.activeQuery.isNotEmpty;
 
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            const _TopBar(),
-            Expanded(
-              child: searching
-                  ? ResultsView(scrollController: _scrollController)
-                  : _CategoryOverview(onOpenAll: _openBrowse),
-            ),
-          ],
+    // 主页搜索态按系统返回：清除搜索回到分类总览，而不是退出应用；
+    // 非搜索态不拦截，再次返回走系统默认行为（退出应用）。
+    return PopScope(
+      canPop: !searching,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) context.read<LibraryController>().clearSearch();
+      },
+      child: Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              const _TopBar(),
+              Expanded(
+                child: searching
+                    ? ResultsView(scrollController: _scrollController)
+                    : _CategoryOverview(onOpenAll: _openBrowse),
+              ),
+            ],
+          ),
         ),
       ),
     );

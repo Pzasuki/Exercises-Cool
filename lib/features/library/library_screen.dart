@@ -71,54 +71,62 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= kNarrowBreakpoint;
-        final content = ResultsView(scrollController: _scrollController);
+    // 返回主页时清除搜索并清掉分类残留（controller.returnToOverview）：
+    // 分类不清会让主页搜索被残留分类隐性过滤；主页回到分类总览而非搜索
+    // 结果。搜索态收起键盘由系统返回默认行为完成，本页内不清内容。
+    return PopScope(
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) context.read<LibraryController>().returnToOverview();
+      },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= kNarrowBreakpoint;
+          final content = ResultsView(scrollController: _scrollController);
 
-        if (isWide) {
-          // 桌面布局：固定宽度侧栏 + 内容区（.app-shell grid）
-          return Scaffold(
-            body: Row(
-              children: [
-                const SizedBox(width: kSidebarWidth, child: FilterPanel()),
-                const VerticalDivider(width: 1, thickness: 1),
-                Expanded(child: content),
-              ],
-            ),
-          );
-        }
-
-        // 移动布局：返回标题栏 + 可折叠筛选面板 + 内容区
-        return Scaffold(
-          body: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, inner) => Column(
+          if (isWide) {
+            // 桌面布局：固定宽度侧栏 + 内容区（.app-shell grid）
+            return Scaffold(
+              body: Row(
                 children: [
-                  _NarrowHeader(
-                    expanded: _panelOpen,
-                    onToggle: _togglePanel,
-                  ),
-                  if (_panelOpen)
-                    Container(
-                      constraints: BoxConstraints(
-                        maxHeight: inner.maxHeight * 0.45,
-                      ),
-                      decoration: const BoxDecoration(
-                        color: AppColors.bgSurface,
-                        border: Border(
-                          bottom: BorderSide(color: AppColors.border),
-                        ),
-                      ),
-                      child: const FilterPanel(),
-                    ),
+                  const SizedBox(width: kSidebarWidth, child: FilterPanel()),
+                  const VerticalDivider(width: 1, thickness: 1),
                   Expanded(child: content),
                 ],
               ),
+            );
+          }
+
+          // 移动布局：返回标题栏 + 可折叠筛选面板 + 内容区
+          return Scaffold(
+            body: SafeArea(
+              child: LayoutBuilder(
+                builder: (context, inner) => Column(
+                  children: [
+                    _NarrowHeader(
+                      expanded: _panelOpen,
+                      onToggle: _togglePanel,
+                    ),
+                    if (_panelOpen)
+                      Container(
+                        constraints: BoxConstraints(
+                          maxHeight: inner.maxHeight * 0.45,
+                        ),
+                        decoration: const BoxDecoration(
+                          color: AppColors.bgSurface,
+                          border: Border(
+                            bottom: BorderSide(color: AppColors.border),
+                          ),
+                        ),
+                        child: const FilterPanel(),
+                      ),
+                    Expanded(child: content),
+                  ],
+                ),
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

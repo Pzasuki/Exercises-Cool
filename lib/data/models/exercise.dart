@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 /// （schema 定义见 docs/exercises.schema.json）。
 @immutable
 class Exercise {
-  const Exercise({
+  // 非 const：searchIndex 需要惰性拼串缓存（见下），const 构造函数
+  // 不允许非常量字段初始化器；现有构造路径均经由 fromJson。
+  Exercise({
     required this.id,
     required this.name,
     required this.category,
@@ -81,9 +83,10 @@ class Exercise {
       secondaryMuscles.where((m) => m != target).toList(growable: false);
 
   /// 搜索索引，对应 JS `_idx = name category target equipment muscle_group`。
-  String get searchIndex =>
+  /// 每次筛选变化会对全库做多遍 contains 匹配，缓存为实例字段避免重复拼串
+  /// （字段构造后不变，缓存安全）。
+  late final String searchIndex =
       '$name $category $target $equipment $muscleGroup'.toLowerCase();
-
   /// 步骤文案的展示语言（当前数据只有中文；多语言支持见 MIGRATION.md 阶段4）。
   static const String displayLang = 'zh';
 

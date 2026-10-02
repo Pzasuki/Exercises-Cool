@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart' show Icons, Size;
+import 'package:flutter/material.dart' show Icons, Size, TextField;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:exercises_app/features/library/widgets/category_target_bar.dart';
+import 'package:exercises_app/features/library/widgets/filter_panel.dart';
 import 'package:exercises_app/features/library/widgets/results_bar.dart';
 import 'package:exercises_app/features/library/widgets/search_field.dart';
 
@@ -150,6 +151,56 @@ void main() {
     expect(find.byType(ResultsBar), findsOneWidget);
   });
 
+  testWidgets('主页搜索态按系统返回：退出搜索回总览，不退出应用', (tester) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await pumpApp(tester, await loadExercises(tester));
+    await tester.enterText(find.byType(SearchField), '深蹲');
+    await pumpFor(tester, const Duration(milliseconds: 400));
+    expect(find.text('全部动作'), findsNothing); // 搜索结果视图
+
+    // 第一次返回：被主页 PopScope 拦截 → 清除搜索回到分类总览。
+    // handlePopRoute 返回 true 表示返回事件被消费（应用未退出）
+    final handled = await tester.binding.handlePopRoute();
+    expect(handled, isTrue);
+    await pumpFor(tester, const Duration(milliseconds: 100));
+    expect(find.text('全部动作'), findsOneWidget);
+
+    // 第二次返回：无搜索态，主页路由 bubble（未消费）→ 系统默认退出应用
+    final handledAgain = await tester.binding.handlePopRoute();
+    expect(handledAgain, isFalse);
+  });
+
+  testWidgets('分类页带搜索词返回主页：搜索内容被清除', (tester) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await pumpApp(tester, await loadExercises(tester));
+    await tester.tap(find.text('胸部'));
+    await pumpFor(tester, const Duration(milliseconds: 300));
+
+    // 分类页内搜索（防抖生效）
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(FilterPanel),
+        matching: find.byType(TextField),
+      ),
+      '深蹲',
+    );
+    await pumpFor(tester, const Duration(milliseconds: 400));
+
+    // 系统返回 → 回到主页（等转场动画结束），且搜索已清除（显示分类总览
+    // 而非搜索结果）。返回被消费 → handlePopRoute 返回 true。
+    final handled = await tester.binding.handlePopRoute();
+    expect(handled, isTrue);
+    await pumpFor(tester, const Duration(milliseconds: 800));
+    expect(find.text('全部动作'), findsOneWidget);
+    expect(find.text('胸部'), findsOneWidget);
+  });
+
   testWidgets('窄屏分类页：标题栏显示分类名与返回键', (tester) async {
     tester.view.physicalSize = const Size(412, 915);
     tester.view.devicePixelRatio = 1.0;
@@ -162,7 +213,50 @@ void main() {
     // 分类页形态：快捷行出现（胸部含 2 个肌群）
     expect(quickChip('全部 163'), findsOneWidget);
     await tester.tap(backButton());
-    await pumpFor(tester, const Duration(milliseconds: 300));
+    // 泵 ≥800ms 等旧路由出树（与「分类页带搜索词返回主页」测试同约定）
+    await pumpFor(tester, const Duration(milliseconds: 800));
     expect(find.text('全部动作'), findsOneWidget); // 回到总览
+  });
+
+  testWidgets('分类页返回主页：分类残留清除，搜索不被隐性过滤', (tester) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final exercises = await loadExercises(tester);
+    final expected =
+        exercises.where((e) => e.searchIndex.contains('深蹲')).length;
+
+    await pumpApp(tester, exercises);
+    await tester.tap(find.text('胸部'));
+    await pumpFor(tester, const Duration(milliseconds: 300));
+    await tester.tap(backButton());
+    // 泵 ≥800ms 等旧路由出树（退场中标题栏会变成「全部动作」造成同名文本撞车）
+    await pumpFor(tester, const Duration(milliseconds: 800));
+
+    // 回主页后搜索：应为全库结果（残留胸部筛选时是 0），
+    // 且结果条可见、无「胸部」徽章（隐性过滤的标志）
+    await tester.enterText(find.byType(SearchField), '深蹲');
+    await pumpFor(tester, const Duration(milliseconds: 400));
+    expect(find.text('$expected / 1324 个动作'), findsOneWidget);
+    expect(find.byType(ResultsBar), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(ResultsBar), matching: find.text('胸部')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('纯空白输入不进入搜索态', (tester) async {
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await pumpApp(tester, await loadExercises(tester));
+    await tester.enterText(find.byType(SearchField), '   ');
+    await pumpFor(tester, const Duration(milliseconds: 400));
+
+    // 仍是分类总览，未切换到结果视图
+    expect(find.text('全部动作'), findsOneWidget);
+    expect(find.byType(ResultsBar), findsNothing);
   });
 }

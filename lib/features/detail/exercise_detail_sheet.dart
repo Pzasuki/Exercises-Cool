@@ -3,12 +3,15 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/i18n/zh_terms.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
 import '../../data/models/exercise.dart';
+import '../favorites/folder_picker_sheet.dart';
+import '../../state/favorites_service.dart';
 
 /// 打开动作详情，对应 JS openModal()：
 /// - 宽屏（≥768px）：居中弹窗（.modal-panel：min(660px,100%)、毛玻璃遮罩、Esc/遮罩关闭）
@@ -169,6 +172,8 @@ class _DetailContent extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
+                _FavoriteButton(exerciseId: ex.id),
+                const SizedBox(width: 8),
                 const _CloseButton(),
               ],
             ),
@@ -242,6 +247,43 @@ class _DetailContent extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 收藏按钮：已收藏（任一收藏夹）为实心主题色，点击打开收藏夹选择弹层。
+class _FavoriteButton extends StatelessWidget {
+  const _FavoriteButton({required this.exerciseId});
+
+  final String exerciseId;
+
+  @override
+  Widget build(BuildContext context) {
+    final favorited =
+        context.watch<FavoritesService>().isFavorite(exerciseId);
+    return Material(
+      color: favorited ? AppColors.accentMuted : AppColors.bgElevated,
+      shape: CircleBorder(
+        side: BorderSide(
+          color: favorited ? AppColors.accent : AppColors.border,
+        ),
+      ),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        // 点按 = 收进/移出「默认收藏」；长按 = 打开收藏夹选择弹层
+        onTap: () =>
+            context.read<FavoritesService>().toggleDefault(exerciseId),
+        onLongPress: () => showFavoriteFolderPicker(context, exerciseId),
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: Icon(
+            favorited ? Icons.favorite : Icons.favorite_outline,
+            size: 15,
+            color: favorited ? AppColors.accent : AppColors.textSecondary,
+          ),
         ),
       ),
     );

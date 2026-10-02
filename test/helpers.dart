@@ -8,7 +8,9 @@ import 'package:provider/provider.dart';
 import 'package:exercises_app/app.dart';
 import 'package:exercises_app/data/models/exercise.dart';
 import 'package:exercises_app/features/library/widgets/filter_panel.dart';
+import 'package:exercises_app/state/favorites_service.dart';
 import 'package:exercises_app/state/library_controller.dart';
+import 'package:exercises_app/state/workout_controller.dart';
 
 /// 测试共用工具：真实数据加载、App 泵入、进入浏览页。
 
@@ -26,12 +28,22 @@ Future<List<Exercise>> loadExercises(WidgetTester tester) async {
 /// 不用 pumpAndSettle：网格尾部的加载指示器会一直转动。
 Future<void> pumpApp(WidgetTester tester, List<Exercise> exercises) async {
   await tester.pumpWidget(
-    ChangeNotifierProvider(
-      create: (_) => LibraryController(exercises),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => LibraryController(exercises)),
+        ChangeNotifierProvider(create: (_) => FavoritesService()),
+        ChangeNotifierProvider(create: (_) => WorkoutController()),
+      ],
       child: const ExercisesApp(),
     ),
   );
   await tester.pump(const Duration(milliseconds: 100));
+  // FavoritesService/WorkoutController 的持久化加载是真实异步，
+  // FakeAsync 的 pump 推不动它：放行真实时间等加载完成，再刷一帧。
+  await tester.runAsync(
+    () => Future<void>.delayed(const Duration(milliseconds: 50)),
+  );
+  await tester.pump();
 }
 
 /// 从总览页点「全部动作」进入浏览页，并推进路由动画。

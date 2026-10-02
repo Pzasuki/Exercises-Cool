@@ -8,6 +8,10 @@ import '../../../state/library_controller.dart';
 /// 总览页顶栏与侧栏面板共用同一 controller.search，输入框文本双向同步——
 /// 「清除全部」等入口清空时这里同步清空（对应原版 searchEl.value = ''）；
 /// 从其他页面带搜索返回时（未聚焦状态）也回填显示。
+///
+/// 同步不变量：每屏同时最多一个可见搜索框。聚焦态只接受自己的打字回声
+/// （防抖生效后 search == 文本），未聚焦态负责镜像其他入口对搜索词的
+/// 改动；「search 为空」的外部清空即使在聚焦态也强制回写。
 class SearchField extends StatefulWidget {
   const SearchField({super.key});
 
