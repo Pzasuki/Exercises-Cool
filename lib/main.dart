@@ -45,10 +45,22 @@ class ExerciseBootstrap extends StatefulWidget {
 class _ExerciseBootstrapState extends State<ExerciseBootstrap> {
   late Future<List<Exercise>> _future;
 
+  // 控制器只创建一次：加载失败重试会重建 Future，但训练状态不能跟着丢
+  // （模板/历史/进行中的会话都挂在 controller 上，且旧桥接的监听无法摘除）。
+  final WorkoutController _workoutController = WorkoutController();
+
   @override
   void initState() {
     super.initState();
+    // 组间倒计时桥接到系统通知（常驻倒计时 + 到点闹钟提醒）
+    RestAlarmBridge(_workoutController);
     _future = _load();
+  }
+
+  @override
+  void dispose() {
+    _workoutController.dispose();
+    super.dispose();
   }
 
   Future<List<Exercise>> _load() =>
@@ -71,9 +83,6 @@ class _ExerciseBootstrapState extends State<ExerciseBootstrap> {
         if (snapshot.hasError) {
           return _BootstrapError(error: snapshot.error!, onRetry: _retry);
         }
-        final workoutController = WorkoutController();
-        // 组间倒计时桥接到系统通知（常驻倒计时 + 到点闹钟提醒）
-        RestAlarmBridge(workoutController);
         return MultiProvider(
           providers: [
             ChangeNotifierProvider(
@@ -81,7 +90,7 @@ class _ExerciseBootstrapState extends State<ExerciseBootstrap> {
             ),
             ChangeNotifierProvider(create: (_) => FavoritesService()),
             ChangeNotifierProvider<WorkoutController>.value(
-              value: workoutController,
+              value: _workoutController,
             ),
           ],
           child: const ExercisesApp(),

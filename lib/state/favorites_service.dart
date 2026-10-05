@@ -1,19 +1,18 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/models/favorite_folder.dart';
+import '../data/repositories/favorites_storage.dart';
 
-/// 收藏夹服务：收藏夹 CRUD 与动作的多夹收藏，持久化到
-/// shared_preferences（键 favoriteFolders，JSON 数组）。
+/// 收藏夹服务：收藏夹 CRUD 与动作的多夹收藏，持久化委托给
+/// [FavoritesStorage]（shared_preferences 键 favoriteFolders）。
 /// 存储不可用（如测试环境未注册插件）时退化为内存态。
 class FavoritesService extends ChangeNotifier {
-  FavoritesService() {
+  FavoritesService({FavoritesStorage? storage})
+      : _storage = storage ?? const FavoritesStorage() {
     _load();
   }
 
-  static const String _prefKey = 'favoriteFolders';
+  final FavoritesStorage _storage;
 
   /// 内置默认收藏夹（用户点收藏直接进这里，无需组织收藏夹）。
   static const String defaultFolderId = 'default';
@@ -124,31 +123,14 @@ class FavoritesService extends ChangeNotifier {
   }
 
   Future<void> _load() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_prefKey);
-      _folders = raw == null
-          ? []
-          : (jsonDecode(raw) as List<dynamic>)
-              .map((e) => FavoriteFolder.fromJson(e as Map<String, dynamic>))
-              .toList();
-      // 无论是否有存储数据，内置默认收藏夹都要保证存在
-      _ensureDefaultFolder();
-      notifyListeners();
-    } catch (_) {
-      // 存储不可用时保持内存态
-    }
+    _folders = await _storage.loadFolders();
+    // 无论是否有存储数据，内置默认收藏夹都要保证存在
+    _ensureDefaultFolder();
+    notifyListeners();
   }
 
-  Future<void> _save() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        _prefKey,
-        jsonEncode(_folders.map((f) => f.toJson()).toList()),
-      );
-    } catch (_) {
-      // 写失败（如测试环境）不影响内存态
-    }
+  /// 持久化当前收藏夹（fire-and-forget，失败由 storage 记日志，不影响内存态）。
+  void _save() {
+    _storage.saveFolders(_folders);
   }
 }

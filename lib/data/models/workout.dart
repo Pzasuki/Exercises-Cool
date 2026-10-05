@@ -1,8 +1,17 @@
 import 'package:flutter/foundation.dart';
 
+/// 模板条目与历史条目的公共形状：既定的一组动作参数（动作 id + 组/次/重量）。
+/// 规划清单从模板或历史记录载入时按此读取，无需关心来源类型。
+abstract interface class WorkoutPlanEntry {
+  String get exerciseId;
+  int get sets;
+  int get reps;
+  double? get weight;
+}
+
 /// 训练计划里的一条动作：做几组、每组几次、可选重量（kg）。
 @immutable
-class PlanEntry {
+class PlanEntry implements WorkoutPlanEntry {
   const PlanEntry({
     required this.exerciseId,
     required this.sets,
@@ -10,11 +19,15 @@ class PlanEntry {
     this.weight,
   });
 
+  @override
   final String exerciseId;
+  @override
   final int sets;
+  @override
   final int reps;
 
   /// 训练重量（kg），可选——null 表示未设置。
+  @override
   final double? weight;
 
   PlanEntry copyWith({int? sets, int? reps, double? weight}) => PlanEntry(
@@ -74,7 +87,7 @@ class WorkoutTemplate {
 
 /// 历史训练记录里的单条动作完成情况。
 @immutable
-class WorkoutRecordEntry {
+class WorkoutRecordEntry implements WorkoutPlanEntry {
   const WorkoutRecordEntry({
     required this.exerciseId,
     required this.sets,
@@ -83,10 +96,14 @@ class WorkoutRecordEntry {
     this.weight,
   });
 
+  @override
   final String exerciseId;
+  @override
   final int sets;
+  @override
   final int reps;
   final int completedSets;
+  @override
   final double? weight;
 
   Map<String, dynamic> toJson() => {
@@ -147,5 +164,54 @@ class WorkoutRecord {
         entries: (json['entries'] as List<dynamic>? ?? const [])
             .map((e) => WorkoutRecordEntry.fromJson(e as Map<String, dynamic>))
             .toList(growable: false),
+      );
+}
+
+/// 用户默认训练参数：首次添加动作时引导设置，之后新加动作自动套用。
+@immutable
+class WorkoutDefaults {
+  const WorkoutDefaults({
+    this.sets = 3,
+    this.reps = 10,
+    this.weight,
+    this.configured = false,
+  });
+
+  final int sets;
+  final int reps;
+
+  /// 训练重量（kg），可选——null 表示未设置。
+  final double? weight;
+
+  /// 是否已完成首次引导（点「跳过」也算完成，之后不再提示）。
+  final bool configured;
+
+  WorkoutDefaults copyWith({
+    int? sets,
+    int? reps,
+    double? weight,
+    bool clearWeight = false,
+    bool? configured,
+  }) =>
+      WorkoutDefaults(
+        sets: sets ?? this.sets,
+        reps: reps ?? this.reps,
+        weight: clearWeight ? null : (weight ?? this.weight),
+        configured: configured ?? this.configured,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'sets': sets,
+        'reps': reps,
+        if (weight != null) 'weight': weight,
+        'configured': configured,
+      };
+
+  factory WorkoutDefaults.fromJson(Map<String, dynamic> json) =>
+      WorkoutDefaults(
+        sets: (json['sets'] as num?)?.toInt() ?? 3,
+        reps: (json['reps'] as num?)?.toInt() ?? 10,
+        weight: (json['weight'] as num?)?.toDouble(),
+        configured: json['configured'] as bool? ?? false,
       );
 }

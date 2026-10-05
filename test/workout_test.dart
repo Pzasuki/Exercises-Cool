@@ -87,6 +87,8 @@ void main() {
         async.elapse(const Duration(seconds: 1));
         expect(controller.resting, isFalse);
         expect(controller.restRemaining, 0);
+        // 自然走完 → 桥接据此到点响铃提醒
+        expect(controller.restEndReason, RestEndReason.completed);
 
         // 休息结束后可继续打点
         controller.completeSet();
@@ -109,6 +111,8 @@ void main() {
         expect(controller.restRemaining, 75);
         controller.skipRest();
         expect(controller.resting, isFalse);
+        // 手动跳过 → 静默撤销提醒，不出声
+        expect(controller.restEndReason, RestEndReason.skipped);
 
         // 跳过该动作 → 直接切下一个
         controller.skipExercise();
@@ -175,6 +179,47 @@ void main() {
 
       controller.deleteRecord(record.id);
       expect(controller.history, isEmpty);
+    });
+
+    test('历史重新训练：按记录进入规划（计划值还原、进度清零），可反复点击', () {
+      final controller = WorkoutController();
+      controller.startPlanning();
+      controller.addExercise('e1');
+      controller.addExercise('e2');
+      controller.updateEntry(0, sets: 5, reps: 8, weight: 20);
+      controller.setRestSeconds(0);
+      controller.startSession();
+
+      // e1 做满（5 组）、e2 跳过 → 两个动作都进历史
+      controller.completeSet();
+      controller.completeSet();
+      controller.completeSet();
+      controller.completeSet();
+      controller.completeSet();
+      controller.skipExercise();
+      controller.finishAndSave();
+      final record = controller.history.single;
+      expect(record.entries, hasLength(2));
+
+      controller.repeatRecord(record.id);
+      expect(controller.status, WorkoutStatus.planning);
+      expect(controller.session, hasLength(2));
+      expect(controller.session[0].sets, 5);
+      expect(controller.session[0].reps, 8);
+      expect(controller.session[0].weight, 20);
+      expect(controller.session[0].completedSets, 0);
+      expect(controller.session[1].sets, 3);
+      expect(controller.session[1].weight, isNull);
+
+      // 反复点击重新训练：每次都是干净的规划态
+      controller.repeatRecord(record.id);
+      expect(controller.status, WorkoutStatus.planning);
+      expect(controller.session.first.completedSets, 0);
+
+      // 不存在的 id 不改变当前状态
+      controller.repeatRecord('missing');
+      expect(controller.status, WorkoutStatus.planning);
+      expect(controller.session, hasLength(2));
     });
 
     test('默认训练参数：保存后套用到新动作与当前清单，持久化', () async {
@@ -528,6 +573,11 @@ void main() {
       await tester.tap(find.text('开始'));
       await pumpFor(tester, const Duration(milliseconds: 100));
       expect(find.textContaining('· 10kg'), findsOneWidget);
+
+      // 执行页按「动作详情」样式展示当前动作（动图/元信息/肌群/步骤共用正文）
+      expect(find.text('部位'), findsOneWidget);
+      expect(find.text('主要肌群'), findsOneWidget);
+      expect(find.text('动作步骤'), findsOneWidget);
 
       // 3 组做完 → 总结；选「很累」→ 完成写入历史
       await tester.tap(find.text('完成一组'));

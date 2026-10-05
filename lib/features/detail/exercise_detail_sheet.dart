@@ -117,8 +117,9 @@ Future<void> _showBottomSheet(BuildContext context, Exercise exercise) {
   );
 }
 
-/// 详情内容（.modal-header/.modal-media/.modal-meta/.modal-muscles/
-/// .modal-instructions），桌面弹窗与移动弹层共用。
+/// 详情内容（.modal-header）：桌面弹窗与移动弹层共用。
+/// 正文（媒体/元信息/肌群/步骤）抽为公开的 [ExerciseDetailBody]，
+/// 训练执行页按需求以同样的详情样式展示当前动作。
 class _DetailContent extends StatelessWidget {
   const _DetailContent({required this.exercise, required this.centered});
 
@@ -134,15 +135,6 @@ class _DetailContent extends StatelessWidget {
     final compact = width < 480; // @media 480：内边距 16
     final hPad = compact ? 16.0 : 18.0;
     final gifMaxHeight = centered ? 320.0 : 240.0;
-
-    final steps = ex.displaySteps;
-    // 次要肌群：优先 secondary_muscles，为空时回退 muscle_group，
-    // 并剔除与主要目标重复的项（对应 openModal 的 primary/secondary 逻辑）。
-    final secondaryRaw = ex.secondaryMuscles.isNotEmpty
-        ? ex.secondaryMuscles
-        : (ex.muscleGroup.isNotEmpty ? [ex.muscleGroup] : const <String>[]);
-    final secondary =
-        secondaryRaw.where((m) => m != ex.target).toList(growable: false);
 
     return SafeArea(
       top: false,
@@ -178,77 +170,114 @@ class _DetailContent extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            // ── .modal-media ──
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-              child: Container(
-                color: AppColors.bgElevated,
-                constraints: BoxConstraints(maxHeight: gifMaxHeight),
-                child: Image.asset(
-                  ex.animationAsset,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, _, _) => SizedBox(height: gifMaxHeight),
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-            // ── .modal-meta ──
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                _MetaChip(label: '部位', value: zh(ex.bodyPart)),
-                _MetaChip(label: '器材', value: zh(ex.equipment)),
-                _MetaChip(label: '目标肌肉', value: zh(ex.target)),
-              ],
-            ),
-            const SizedBox(height: 14),
-            // ── .modal-muscles（底部带分隔线）──
-            Container(
-              padding: const EdgeInsets.only(bottom: 16),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: AppColors.border)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const _SectionLabel('肌肉'),
-                  const SizedBox(height: 10),
-                  _MusclesGrid(
-                    primary:
-                        ex.target.isEmpty ? const <String>[] : [ex.target],
-                    secondary: secondary,
-                  ),
-                ],
-              ),
-            ),
-            // ── .modal-instructions ──
-            Padding(
-              padding: const EdgeInsets.only(top: 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const _SectionLabel('动作步骤'),
-                  const SizedBox(height: 10),
-                  if (steps.isEmpty)
-                    const Text(
-                      '暂无步骤说明',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                      ),
-                    )
-                  else
-                    ...List.generate(
-                      steps.length,
-                      (i) => _Step(index: i + 1, text: steps[i]),
-                    ),
-                ],
-              ),
-            ),
+            ExerciseDetailBody(exercise: ex, gifMaxHeight: gifMaxHeight),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 详情正文（.modal-media/.modal-meta/.modal-muscles/.modal-instructions）：
+/// 动图媒体区、部位/器材/目标肌肉元信息、主要/次要肌群、编号步骤。
+/// 详情弹窗与训练执行页（训练中查看当前动作）共用，保证两处样式一致。
+class ExerciseDetailBody extends StatelessWidget {
+  const ExerciseDetailBody({
+    super.key,
+    required this.exercise,
+    this.gifMaxHeight = 240,
+  });
+
+  final Exercise exercise;
+
+  /// 动图区限高：桌面居中弹窗 320 / 弹层与执行页 240。
+  final double gifMaxHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final ex = exercise;
+    final steps = ex.displaySteps;
+    // 次要肌群：优先 secondary_muscles，为空时回退 muscle_group，
+    // 并剔除与主要目标重复的项（对应 openModal 的 primary/secondary 逻辑）。
+    final secondaryRaw = ex.secondaryMuscles.isNotEmpty
+        ? ex.secondaryMuscles
+        : (ex.muscleGroup.isNotEmpty ? [ex.muscleGroup] : const <String>[]);
+    final secondary =
+        secondaryRaw.where((m) => m != ex.target).toList(growable: false);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── .modal-media ──
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+          child: Container(
+            color: AppColors.bgElevated,
+            constraints: BoxConstraints(maxHeight: gifMaxHeight),
+            child: Image.asset(
+              ex.animationAsset,
+              fit: BoxFit.contain,
+              gaplessPlayback: true,
+              errorBuilder: (_, _, _) => SizedBox(height: gifMaxHeight),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        // ── .modal-meta ──
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _MetaChip(label: '部位', value: zh(ex.bodyPart)),
+            _MetaChip(label: '器材', value: zh(ex.equipment)),
+            _MetaChip(label: '目标肌肉', value: zh(ex.target)),
+          ],
+        ),
+        const SizedBox(height: 14),
+        // ── .modal-muscles（底部带分隔线）──
+        Container(
+          padding: const EdgeInsets.only(bottom: 16),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppColors.border)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _SectionLabel('肌肉'),
+              const SizedBox(height: 10),
+              _MusclesGrid(
+                primary:
+                    ex.target.isEmpty ? const <String>[] : [ex.target],
+                secondary: secondary,
+              ),
+            ],
+          ),
+        ),
+        // ── .modal-instructions ──
+        Padding(
+          padding: const EdgeInsets.only(top: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _SectionLabel('动作步骤'),
+              const SizedBox(height: 10),
+              if (steps.isEmpty)
+                const Text(
+                  '暂无步骤说明',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                )
+              else
+                ...List.generate(
+                  steps.length,
+                  (i) => _Step(index: i + 1, text: steps[i]),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

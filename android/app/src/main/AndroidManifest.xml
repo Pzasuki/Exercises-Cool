@@ -2,8 +2,14 @@
     <!-- 组间倒计时的系统级提醒（见 lib/services/rest_alarm_service.dart） -->
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- 精确到点兜底闹钟：Android 13+ 由 USE_EXACT_ALARM 自动授予（应用
+         核心功能即倒计时提醒），12~13 由 SCHEDULE_EXACT_ALARM 覆盖 -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- 后台倒计时前台服务（RestCountdownService），targetSdk 34+ 必须声明类型 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <application
         android:label="动作库"
         android:name="${applicationName}"
@@ -30,6 +36,18 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- 后台倒计时前台服务：chronometer 通知 + AlarmManager 到点兜底 -->
+        <service
+            android:name=".RestCountdownService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="workout_rest_countdown"/>
+        </service>
+        <receiver
+            android:name=".RestEndReceiver"
+            android:exported="false"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

@@ -282,6 +282,45 @@ finder 对非选中 IndexedStack 子树会跳过（视为离台），涉及跨 T
 
 测试 56 项不变（重写挑动作交互用例覆盖两级导航、分组与跨层级多选）。
 
+### 阶段13 休息提醒重做、历史再训练、返回键与执行页动图 ✅ 已完成（需求调整）
+
+1. **组间休息到点提醒重做**（原实现实测到点不响）：
+   - 原来的问题：a) Android 14 起 `SCHEDULE_EXACT_ALARM` 默认未授予，
+     精确预约抛异常被 catch，到点通知从未安排成功；b) 旧桥接在**自然结束**
+     时也走了 `cancelAll`——最后一次 tick 后剩余读数是 1，`> 0` 判定误判为
+     「未走完」，预约成功也会被自己撤掉；c) 渠道创建后设置不可更改。
+   - 新设计（`RestAlarmService` 重写 + `MainActivity.kt` 新增 `rest_alarm`
+     MethodChannel）：
+     - **主路径 = 本机直接响铃**：app 存活时倒计时走完的瞬间，经
+       MethodChannel 调原生 `RingtoneManager` 播放**手机当前设置的默认
+       闹铃声**（未设置则回退通知声/铃声，走闹钟音量）+ 波形震动，不依赖
+       任何闹钟权限，前台后台都即时；默认音可能很长，4 秒后主动停。
+     - **兜底路径 = 系统通知**：休息开始时预约到点通知
+       （`canScheduleExactNotifications` 判定，可用则精确闹钟，否则非精确），
+       仅当 app 被杀（Dart 不再运行）时触发；预约时刻加 3 秒余量，本机
+       路径正常时先到点并撤销它，避免双重提醒。
+     - 通知渠道 v2（`rest_alert_v2`）：默认闹铃声 URI +
+       `AudioAttributesUsage.alarm` + 震动样式；`+15s` 延长时兜底闹钟按
+       新剩余时间重排，常驻通知进度条基准同步。
+   - 控制器新增 `RestEndReason`（completed / skipped）：自然走完 = 响铃
+     提醒；跳过休息、跳过动作、提前结束 = 静默撤销。桥接按此分流，
+     替代旧的「剩余 > 0」误判。
+2. **历史训练可重新训练**：`WorkoutController.repeatRecord(id)` 按记录的
+   计划值（组/次/重量）载入规划态、进度清零；历史卡片展开后新增
+   「再练一次」按钮，可反复点击。
+3. **系统返回键统一**（`HomeShell` PopScope）：压在根路由上的页面
+   （浏览页/收藏夹内页/弹层）逐层正常 pop；训练/收藏 Tab 的返回被拦截并
+   切回主页 Tab；主页 Tab 不拦截（系统默认退出应用）。
+4. **训练中按详情样式展示当前动作**：详情弹窗正文抽为共用组件
+   `ExerciseDetailBody`（动图媒体区 + 部位/器材/目标肌肉元信息 +
+   主要/次要肌群 + 编号步骤），执行页在动作名与组进度/间歇倒计时
+   **之后**复用它（向下滚动翻看），两处样式完全一致；动图 Animated
+   WebP 循环播放（限高 240）。倒计时保持在正文上方——休息时最需要
+   的信息不被长内容挤出首屏。
+
+测试 56 → 58 项（历史重新训练、返回键导航；倒计时用例补充结束原因断言），
+`flutter analyze` 0 issue。
+
 ### 阶段7 数据与体积优化（可选）
 
 1. 包体积：assets 共 52MB，安卓发布建议 `flutter build apk --release --split-per-abi`；
@@ -296,7 +335,7 @@ finder 对非选中 IndexedStack 子树会跳过（视为离台），涉及跨 T
 ```bash
 flutter run                # 连接的安卓设备/模拟器
 flutter analyze            # 静态检查（当前 0 issue）
-flutter test               # 单元+组件测试（当前 56 项全过）
+flutter test               # 单元+组件测试（当前 58 项全过）
 flutter build apk --release --split-per-abi
 ```
 

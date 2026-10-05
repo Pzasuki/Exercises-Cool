@@ -52,4 +52,6 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // 前台服务/到点提醒通知用 NotificationCompat（RestCountdownService）
+    implementation("androidx.core:core-ktx:1.15.0")
 }

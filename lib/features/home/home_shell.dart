@@ -25,29 +25,38 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _tab,
-        children: const [
-          // 「动作库」Tab：分类总览（浏览页仍经 Navigator push，保持两级浏览）
-          OverviewScreen(),
-          WorkoutScreen(),
-          FavoritesScreen(),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
-        height: 64,
-        backgroundColor: AppColors.bgSurface,
-        indicatorColor: AppColors.accentMuted,
-        destinations: [
-          for (final (label, icon) in _tabs)
-            NavigationDestination(
-              icon: Icon(icon, size: 22),
-              label: label,
-            ),
-        ],
+    // 系统返回键：主页 Tab 走系统默认（退出应用）；训练/收藏 Tab 被拦截，
+    // 切回主页 Tab。压在根路由之上的页面（浏览页/收藏夹内页/弹层）由
+    // Navigator 正常逐层 pop，不受影响。
+    return PopScope(
+      canPop: _tab == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) setState(() => _tab = 0);
+      },
+      child: Scaffold(
+        body: IndexedStack(
+          index: _tab,
+          children: const [
+            // 「动作库」Tab：分类总览（浏览页仍经 Navigator push，保持两级浏览）
+            OverviewScreen(),
+            WorkoutScreen(),
+            FavoritesScreen(),
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _tab,
+          onDestinationSelected: (i) => setState(() => _tab = i),
+          height: 64,
+          backgroundColor: AppColors.bgSurface,
+          indicatorColor: AppColors.accentMuted,
+          destinations: [
+            for (final (label, icon) in _tabs)
+              NavigationDestination(
+                icon: Icon(icon, size: 22),
+                label: label,
+              ),
+          ],
+        ),
       ),
     );
   }
