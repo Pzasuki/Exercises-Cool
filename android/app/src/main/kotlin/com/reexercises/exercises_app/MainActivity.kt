@@ -1,112 +1,80 @@
 package com.reexercises.exercises_app
 
-import android.content.Context
-import android.media.AudioAttributes
-import android.media.Ringtone
-import android.media.RingtoneManager
-import android.net.Uri
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
+import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 /// 组间休息到点的本机提醒通道（见 lib/services/rest_alarm_service.dart）：
-/// - defaultAlarmSoundUri：用户设置的默认闹铃声（系统设置「闹钟铃声」），
-///   供休息提醒通知渠道使用；
+/// - defaultAlarmSoundUri：用户设置的默认闹铃声（系统设置「闹钟铃声」）；
 /// - playDefaultAlarm / stopAlarm：app 存活时由 Dart 在倒计时走完的瞬间
-///   直接响铃（Ringtone 走闹钟音量），不依赖闹钟权限；
+///   直接响铃（Ringtone 走闹钟音量），不依赖通知权限；
 /// - vibrate：波形震动；
 /// - startCountdownService / stopCountdownService：后台倒计时交给原生前台
 ///   服务（RestCountdownService，chronometer 渲染 + AlarmManager 到点兜底）。
+/// 响铃/震动方法返回 Boolean（是否真的触发），供 app 内「提醒自检」展示。
+/// 通知点击通过 open_tab extra 唤起并转发 `openWorkoutTab`，Dart 侧切到训练 Tab。
 class MainActivity : FlutterActivity() {
     companion object {
         const val CHANNEL = "rest_alarm"
-        val VIBE_PATTERN = longArrayOf(0, 450, 250, 450, 250, 450)
+        const val OPEN_TAB_EXTRA = "open_tab"
+        const val OPEN_TAB_WORKOUT = "workout"
+
+        /// 冷启动推送延迟：等 Dart main() 安装好通道回调
+        private const val OPEN_TAB_PUSH_DELAY_MS = 1000L
     }
 
-    private var ringtone: Ringtone? = null
+    private var channel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-            .setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "defaultAlarmSoundUri" -> result.success(defaultAlarmSound()?.toString())
-                    "playDefaultAlarm" -> {
-                        playDefaultAlarm()
-                        result.success(null)
-                    }
-                    "stopAlarm" -> {
-                        stopAlarm()
-                        result.success(null)
-                    }
-                    "vibrate" -> {
-                        vibrate()
-                        result.success(null)
-                    }
-                    "startCountdownService" -> {
-                        val seconds = call.argument<Int>("seconds") ?: -1
-                        result.success(RestCountdownService.start(this, seconds))
-                    }
-                    "stopCountdownService" -> {
-                        RestCountdownService.stop(this)
-                        result.success(null)
-                    }
-                    else -> result.notImplemented()
+        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        channel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "defaultAlarmSoundUri" ->
+                    result.success(AlarmRinger.defaultAlarmSound(this)?.toString())
+                "playDefaultAlarm" -> result.success(AlarmRinger.play(this))
+                "stopAlarm" -> {
+                    AlarmRinger.stop()
+                    result.success(null)
                 }
+                "vibrate" -> result.success(AlarmRinger.vibrate(this))
+                "startCountdownService" -> {
+                    val seconds = call.argument<Int>("seconds") ?: -1
+                    result.success(RestCountdownService.start(this, seconds))
+                }
+                "stopCountdownService" -> {
+                    RestCountdownService.stop(this)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
             }
-    }
-
-    /// 默认闹铃声；未设置时依次回退通知声 / 铃声（RingtoneManager 官方回退链）。
-    private fun defaultAlarmSound(): Uri? {
-        var uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-        if (uri == null) uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-        if (uri == null) uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-        return uri
-    }
-
-    private fun playDefaultAlarm() {
-        stopAlarm()
-        val sound = defaultAlarmSound() ?: return
-        val ringtone = RingtoneManager.getRingtone(applicationContext, sound) ?: return
-        ringtone.audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-        ringtone.play()
-        this.ringtone = ringtone
-    }
-
-    private fun stopAlarm() {
-        try {
-            ringtone?.stop()
-        } catch (_: Exception) {
-            // 已停止或未在播放
         }
-        ringtone = null
+        // 冷启动时 Dart 的通道回调尚未安装（main() 需先跑完），延迟 1 秒推送；
+        // 热启动（onNewIntent）则立即处理。
+        Handler(Looper.getMainLooper()).postDelayed(
+            { handleOpenTabIntent(intent) },
+            OPEN_TAB_PUSH_DELAY_MS,
+        )
     }
 
-    private fun vibrate() {
-        val vibrator: Vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val manager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            manager.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createWaveform(VIBE_PATTERN, -1))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(VIBE_PATTERN, -1)
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleOpenTabIntent(intent)
+    }
+
+    /// 通知点击携带 open_tab=workout 时，通知 Dart 切到训练 Tab
+    /// （singleTop 启动：冷启动走 onCreate→configureFlutterEngine，热启动走 onNewIntent）。
+    private fun handleOpenTabIntent(intent: Intent?) {
+        if (intent?.getStringExtra(OPEN_TAB_EXTRA) == OPEN_TAB_WORKOUT) {
+            channel?.invokeMethod("openWorkoutTab", null)
         }
     }
 
     override fun onDestroy() {
-        stopAlarm()
+        AlarmRinger.stop()
         super.onDestroy()
     }
 }

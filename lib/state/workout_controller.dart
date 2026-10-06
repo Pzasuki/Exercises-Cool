@@ -291,16 +291,22 @@ class WorkoutController extends ChangeNotifier {
 
   // ── 间歇倒计时 ──
 
+  /// tick 频率。刻意高于 1 秒：`Timer.periodic` 只会**晚于**预定时刻触发
+  /// （事件循环调度开销），误差单调累积；若按 1 秒 tick，取整后的读数每积累
+  /// 满 1 秒才跳一次，界面表现为「卡住数秒再跳 1 秒」。tick 越小，读数越紧贴
+  /// 墙钟（显示滞后 < 一个 tick），且只在整数秒变化时 notify，开销仍为每秒一次。
+  static const Duration _restTickInterval = Duration(milliseconds: 200);
+
   void _startRest() {
     _resting = true;
     _restRemaining = _restSeconds;
     _restEndsAt = clock.now().add(Duration(seconds: _restSeconds));
     _restEndReason = RestEndReason.completed;
     _stopRestTimer();
-    _restTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tickRest());
+    _restTimer = Timer.periodic(_restTickInterval, (_) => _tickRest());
   }
 
-  /// 每秒按墙钟结束时刻重算剩余并刷新；已到点则结束本次休息。
+  /// 按墙钟结束时刻重算剩余并刷新；已到点则结束本次休息。
   ///
   /// 到点晚于 [_backupGraceMs]（进程冻结期间错过、恢复后才跑到的补偿
   /// tick）→ 兜底通知应已提醒过，置 expiredInBackground 静默收尾；

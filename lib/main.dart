@@ -15,6 +15,10 @@ import 'state/workout_controller.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 尽早安装组间提醒的原生回调：由「休息结束」通知点回 app（冷启动）时，
+  // 原生在引擎就绪后即推送 openWorkoutTab，此处不装会丢失跳转请求。
+  RestAlarmService.instance.prewarm();
+
   // 对应原版 Capacitor StatusBar 设置：内容延伸到状态栏后、浅色底深色图标。
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(

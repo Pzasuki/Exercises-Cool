@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../services/rest_alarm_service.dart';
 import '../favorites/favorites_screen.dart';
 import '../overview/overview_screen.dart';
 import '../workout/workout_screen.dart';
@@ -16,6 +17,28 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // 点击系统通知（组间倒计时/休息结束）→ 落到训练 Tab。
+    // 冷启动时原生推送可能先于本页注册到达，先消费缓存的跳转请求。
+    if (RestAlarmService.instance.consumePendingOpenWorkout()) {
+      _tab = 1;
+    }
+    RestAlarmService.onOpenWorkoutRequested = _openWorkoutTab;
+  }
+
+  @override
+  void dispose() {
+    RestAlarmService.onOpenWorkoutRequested = null;
+    super.dispose();
+  }
+
+  void _openWorkoutTab() {
+    if (!mounted) return;
+    setState(() => _tab = 1);
+  }
 
   static const _tabs = [
     ('动作库', Icons.grid_view_rounded),

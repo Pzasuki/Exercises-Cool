@@ -4,6 +4,7 @@ import 'package:flutter/material.dart'
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:exercises_app/services/rest_alarm_service.dart';
 import 'package:exercises_app/state/workout_controller.dart';
 
 import 'helpers.dart';
@@ -306,6 +307,20 @@ void main() {
       await tester.tap(find.text('跳过'));
       await pumpFor(tester, const Duration(milliseconds: 300));
     }
+
+    testWidgets('点系统通知回调：切到训练 Tab', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await pumpApp(tester, await loadExercises(tester));
+      expect(find.text('全部动作'), findsOneWidget); // 动作库 Tab
+
+      // 原生侧收到通知点击后经 RestAlarmService.onOpenWorkoutRequested 转发
+      RestAlarmService.onOpenWorkoutRequested?.call();
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      expect(find.text('开始训练'), findsOneWidget); // 训练 Tab
+    });
 
     testWidgets('挑动作：器材总览 → 器材内部位分组 → 多选批量加',
         (tester) async {

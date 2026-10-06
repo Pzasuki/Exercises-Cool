@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -42,11 +43,21 @@ class RestCountdownService : Service() {
 
     /** 结束时刻的到点动作：提醒 + 自停（进程还活着时的主提醒路径）。 */
     private val endAction = Runnable {
+        Log.d(TAG, "endAction fired (foreground handler path)")
         // 先撤掉尚未触发的兜底闹钟，避免 3 秒后双重提醒
         cancelEndAlarm(this)
         if (tryClaimAlert()) {
+            // 声音与震动**不依赖通知权限**：直接本机响铃 + 波形震动；
+            // 通知只承担视觉部分（未授权时静默跳过，不影响响铃）。
+            AlarmRinger.play(this)
+            AlarmRinger.vibrate(this)
             postEndAlert(this)
         }
+        // 显式摘掉前台倒计时通知：不能只依赖 stopSelf() —— 倒计时走完后若
+        // 该通知没被移除，系统 Chronometer 会继续读数并越过零点，通知栏就
+        // 留在 -00:01 这样的负数上。STOP_FOREGROUND_REMOVE 只移除本前台通知，
+        // 不影响上面刚发出的到点提醒（不同 id）。
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
@@ -66,6 +77,7 @@ class RestCountdownService : Service() {
         handler.postDelayed(
             endAction, (endAtMillis - System.currentTimeMillis()).coerceAtLeast(0L)
         )
+        Log.d(TAG, "countdown started: ${seconds}s, endAt=$endAtMillis")
         return START_NOT_STICKY
     }
 
@@ -82,25 +94,30 @@ class RestCountdownService : Service() {
             .setUsesChronometer(true)
             .setWhen(endAtMillis)
             .setChronometerCountDown(true)
+            // 点击通知回到 app 的训练页
+            .setContentIntent(launchIntent(this))
             .build()
     }
 
-    /** 到点兜底闹钟：比到点晚 3 秒余量，正常到点时会被 endAction 先行撤销。 */
+    /** 到点兜底闹钟：setAlarmClock（系统时钟同款机制）——比 setExactAndAllowWhileIdle
+     *  更能穿透 Doze 与厂商省电策略（无需精确闹钟权限，OEM 不拦截用户闹钟）。
+     *  比到点晚 3 秒余量，正常到点时会被 endAction 先行撤销。 */
     private fun scheduleEndAlarm(seconds: Int) {
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val triggerAtMillis =
             System.currentTimeMillis() + (seconds + GRACE_SECONDS) * 1000L
-        val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-            alarmManager.canScheduleExactAlarms()
-        if (canExact) {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP, triggerAtMillis, endAlarmPendingIntent(this)
-            )
-        } else {
-            alarmManager.setAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP, triggerAtMillis, endAlarmPendingIntent(this)
-            )
-        }
+        val info = AlarmManager.AlarmClockInfo(
+            triggerAtMillis,
+            PendingIntent.getActivity(
+                this,
+                0,
+                Intent(this, MainActivity::class.java)
+                    .putExtra(MainActivity.OPEN_TAB_EXTRA, MainActivity.OPEN_TAB_WORKOUT),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            ),
+        )
+        Log.d(TAG, "scheduleEndAlarm in ${seconds + GRACE_SECONDS}s via setAlarmClock")
+        alarmManager.setAlarmClock(info, endAlarmPendingIntent(this))
     }
 
     private fun cancelEndAlarm(context: Context) {
@@ -117,18 +134,31 @@ class RestCountdownService : Service() {
         // 兜底闹钟刻意不在这里撤：服务被系统直接杀死时 onDestroy 不保证
         // 执行，闹钟保留才能让 RestEndReceiver 完成最后的提醒。
         handler.removeCallbacks(endAction)
+        // 兜底再摘一次前台通知（先跳过休息、进程被回收等路径不会走 endAction）。
+        // 对已停止的前台服务调用是空操作，幂等安全 —— 关键是绝不能让
+        // 倒计时通知在服务消失后继续存在于通知栏（Chronometer 会读成负数）。
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (_: Exception) {
+        }
         super.onDestroy()
     }
 
     companion object {
+        const val TAG = "RestAlarm"
         const val EXTRA_SECONDS = "remainingSeconds"
         const val NOTIFICATION_ID = 1
         const val ALERT_NOTIFICATION_ID = 2
         const val GRACE_SECONDS = 3
 
-        // 渠道 id 与 Dart 侧 flutter_local_notifications 对齐
-        const val CHANNEL_ONGOING = "rest_countdown"
-        const val CHANNEL_ALERT = "rest_alert_v2"
+        // 渠道 id 与 Dart 侧 flutter_local_notifications 对齐。
+        // v2：旧渠道可能已被部分 ROM 按默认通知声创建（渠道设置不可改），
+        // 显式静音必须换新 id 才能生效。
+        const val CHANNEL_ONGOING = "rest_countdown_v2"
+
+        /// 到点提醒的视觉渠道：**静音**（声音与震动由 AlarmRinger 负责，
+        /// 不依赖通知权限）。v2 渠道带铃声且创建后不可改设置，故换 v3。
+        const val CHANNEL_ALERT = "rest_alert_v3"
 
         private const val ALERT_DEDUP_WINDOW_MS = 10_000L
 
@@ -183,29 +213,23 @@ class RestCountdownService : Service() {
                         CHANNEL_ONGOING, "组间倒计时", NotificationManager.IMPORTANCE_LOW
                     ).apply {
                         description = "休息期间的常驻倒计时通知"
+                        // 显式静音：部分 ROM 对未显式设置的渠道按默认通知声处理，
+                        // 导致开始倒计时时弹窗带铃声与震动
+                        setSound(null, null)
+                        enableVibration(false)
                     }
                 )
             }
             if (manager.getNotificationChannel(CHANNEL_ALERT) == null) {
-                val sound: Uri? = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                // 静音渠道：heads-up 只承担视觉部分；铃声与震动由 AlarmRinger
+                // 直接播放（不依赖通知权限，未授权时依然响铃震动）。
                 manager.createNotificationChannel(
                     NotificationChannel(
                         CHANNEL_ALERT, "组间休息提醒", NotificationManager.IMPORTANCE_HIGH
                     ).apply {
-                        description = "休息到点的提醒（默认闹铃声与震动）"
-                        if (sound != null) {
-                            setSound(
-                                sound,
-                                AudioAttributes.Builder()
-                                    .setUsage(AudioAttributes.USAGE_ALARM)
-                                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                                    .build()
-                            )
-                        }
-                        enableVibration(true)
-                        vibrationPattern = longArrayOf(0, 450, 250, 450, 250, 450)
+                        description = "休息到点的提醒（声音由 app 播放）"
+                        setSound(null, null)
+                        enableVibration(false)
                     }
                 )
             }
@@ -253,9 +277,11 @@ class RestCountdownService : Service() {
                 .setContentIntent(launchIntent(context))
                 .build()
 
-        /// 点提醒回到 app（用启动 intent，落在既有任务栈上）。
+        /// 点提醒回到 app 的训练页（启动 intent 携带 open_tab extra，
+        /// MainActivity 收到后通知 Dart 切 Tab；落在既有任务栈上）。
         private fun launchIntent(context: Context): PendingIntent? =
             context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
+                it.putExtra(MainActivity.OPEN_TAB_EXTRA, MainActivity.OPEN_TAB_WORKOUT)
                 PendingIntent.getActivity(
                     context,
                     0,

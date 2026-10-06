@@ -321,6 +321,66 @@ finder 对非选中 IndexedStack 子树会跳过（视为离台），涉及跨 T
 测试 56 → 58 项（历史重新训练、返回键导航；倒计时用例补充结束原因断言），
 `flutter analyze` 0 issue。
 
+### 阶段14 休息提醒与通知权限解耦 + 提醒自检 ✅ 已完成（真机「全不响」排查）
+
+真机反馈到点音效/震动/通知/前台服务全部无效。排查结论：**前台服务模式下，
+到点的声音与震动完全依赖到点通知**（渠道铃声），而 `postEndAlert` 在
+POST_NOTIFICATIONS 未授予（Android 13+ 默认未授予且拒绝后不再弹框）时
+静默返回——一个权限即可让四项能力全部静默失效，且无任何报错。
+
+修复（声音/震动与通知权限彻底解耦）：
+1. **原生 `AlarmRinger.kt`**（新）：响铃（用户默认闹铃声、闹钟音量）+
+   波形震动，返回 Boolean 表示是否真的触发；供 MainActivity（Dart 调用/
+   自检）、服务到点动作、RestEndReceiver 兜底三处共用。
+2. **到点三处全部直接响铃 + 震动**：服务 `endAction`、兜底 Receiver 不再
+   依赖通知渠道发声；「休息结束」通知改为**静音渠道 rest_alert_v3**
+   （v2 带铃声且创建后不可改），只承担视觉 heads-up。
+3. **提醒自检面板**（规划页「组间倒计时」下方，提醒自检）：一键逐层触发并
+   报告——原生通道连通 / 通知权限 / 精确闹钟 / 响铃已触发 / 震动已触发 /
+   前台服务已启动（含 5 秒端到端演示：chronometer 倒计时通知 → 到点响铃）。
+   `playDefaultAlarm`/`vibrate` 原生返回 Boolean 供面板展示。
+
+阶段14 补充（真机验收后的两处修正）：
+1. **开始倒计时的弹窗带声音/震动**：常驻倒计时通知渠道（rest_countdown）
+   创建时未显式静音，部分 ROM 按默认通知声处理且渠道设置创建后不可改——
+   渠道升级 `rest_countdown_v2` 并显式 `setSound(null,null)` + 禁震动。
+2. **点击通知无反应**：常驻通知未绑 contentIntent。现绑定启动 intent 并
+   携带 `open_tab=workout` extra，MainActivity（冷启动 onCreate /
+   热启动 onNewIntent）经 rest_alarm 通道转发 `openWorkoutTab` →
+   `RestAlarmService.onOpenWorkoutRequested` → HomeShell 切到训练 Tab；
+   到点提醒通知同样生效。
+3. **后台到点全静默（负数计时挂在通知栏）**：切后台后厂商省电策略冻结
+   进程——服务内 Handler 到点动作不执行，setExactAndAllowWhileIdle 兜底
+   也可能被拦。修复：兜底闹钟改用 **setAlarmClock**（系统时钟同款机制，
+   Doze/OEM 省电都不拦、无需精确闹钟权限）；RestEndReceiver 用 goAsync +
+   部分唤醒锁（8 秒）保证响铃期间进程不被回收，并补全原生日志
+   （Log.d，tag=RestAlarm）供 adb logcat 定位。
+
+真机自检步骤：完整重装（原生代码变更必须全量重编，不能用热重载）→
+规划页打开组间倒计时（此刻申请通知权限，务必允许）→ 展开「提醒自检」→
+依次确认：响铃听到？震动感到？通知权限 ✅？前台服务 ✅？若仅通知权限 ❌，
+去系统设置开启即可；若响铃 ❌ 且通道连通 ❌，回传 `adb logcat` 抓取的
+RestAlarm 相关日志。
+
+### 阶段15 通知点击跳训练页、开始误弹修复、自检覆盖兜底闹钟 ✅ 已完成
+
+真机验收通过（音效/震动/到点弹窗正常）后的三项收尾：
+
+1. **修复「倒计时开始时误弹带声弹窗」**：到点预约闹钟（zonedSchedule/
+   AlarmManager）会跨会话、跨应用更新存活——上一轮遗留未触发的「休息结束」
+   预约会在下一轮倒计时开始的任意时刻误触发。`start()` 现在无条件先
+   `cancel(id: _alertId)` 清掉遗留预约。
+2. **点通知跳回训练页**：常驻倒计时与「休息结束」通知带 `payload/open_tab`
+   标记，点击后经两条链路通知 Dart（Dart 通知走 onDidReceiveNotificationResponse、
+   原生通知走 rest_alarm 通道推送 openWorkoutTab），`HomeShell` 切到训练 Tab；
+   冷启动（app 未运行时点通知）由 main() 最早的 `prewarm()` 安装回调 +
+   原生延迟 1 秒推送保证不丢。
+3. **自检覆盖兜底闹钟功能**（原来只查权限）：精确闹钟权限可用时实际预约
+   一条 5 秒后的静音测试通知，「兜底闹钟功能」行报告预约结果——5 秒后弹出
+   「休息结束（自检）」即链路可用。
+
+测试 58 → 59 项。
+
 ### 阶段7 数据与体积优化（可选）
 
 1. 包体积：assets 共 52MB，安卓发布建议 `flutter build apk --release --split-per-abi`；
