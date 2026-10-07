@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart' show Icons, Size, TextField;
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:exercises_app/features/library/widgets/category_target_bar.dart';
 import 'package:exercises_app/features/library/widgets/filter_panel.dart';
 import 'package:exercises_app/features/library/widgets/results_bar.dart';
 import 'package:exercises_app/features/library/widgets/search_field.dart';
@@ -9,14 +8,9 @@ import 'package:exercises_app/features/library/widgets/search_field.dart';
 import 'helpers.dart';
 
 /// 两级浏览测试：总览首页渲染 / 搜索切换结果视图 / 点分类进入浏览页 /
-/// 目标肌群快捷行收窄（见 MIGRATION.md 阶段8）。
+/// 分类页形态差异（见 MIGRATION.md 阶段8）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  Finder quickChip(String label) => find.descendant(
-        of: find.byType(CategoryTargetBar),
-        matching: find.textContaining(label),
-      );
 
   testWidgets('总览页：部位卡片按数量降序，点卡片进入分类浏览', (tester) async {
     tester.view.physicalSize = const Size(1920, 1080);
@@ -83,45 +77,7 @@ void main() {
     expect(find.text('全部动作'), findsOneWidget);
   });
 
-  testWidgets('分类页目标肌群快捷行：点击收窄，「全部」恢复', (tester) async {
-    tester.view.physicalSize = const Size(1920, 1080);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    await pumpApp(tester, await loadExercises(tester));
-
-    // 进入胸部分类（含 2 个目标肌群：胸大肌 158 / 前锯肌 5）
-    await tester.tap(find.text('胸部'));
-    await pumpFor(tester, const Duration(milliseconds: 300));
-
-    expect(quickChip('全部 163'), findsOneWidget);
-    expect(quickChip('胸大肌 158'), findsOneWidget);
-
-    await tester.tap(quickChip('胸大肌'));
-    await pumpFor(tester, const Duration(milliseconds: 100));
-    expect(find.text('158 / 1324 个动作'), findsOneWidget);
-
-    // 点「全部」恢复到分类全量
-    await tester.tap(quickChip('全部'));
-    await pumpFor(tester, const Duration(milliseconds: 100));
-    expect(find.text('163 / 1324 个动作'), findsOneWidget);
-  });
-
-  testWidgets('单肌群分类不显示快捷行', (tester) async {
-    tester.view.physicalSize = const Size(1920, 1080);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    await pumpApp(tester, await loadExercises(tester));
-
-    // 腰腹只有腹肌一个目标肌群，快捷行应隐藏（无「全部」芯片）
-    await tester.tap(find.text('腰腹'));
-    await pumpFor(tester, const Duration(milliseconds: 300));
-    expect(find.text('169 / 1324 个动作'), findsOneWidget);
-    expect(quickChip('全部'), findsNothing);
-  });
-
-  testWidgets('分类页侧栏只留器材、无结果条；回全部动作后三组恢复', (tester) async {
+  testWidgets('分类页侧栏只留器材；结果条显示分类徽章与计数', (tester) async {
     tester.view.physicalSize = const Size(1920, 1080);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -133,12 +89,12 @@ void main() {
     await tester.tap(find.text('胸部'));
     await pumpFor(tester, const Duration(milliseconds: 300));
 
-    // 分类页形态：分类/目标肌肉组隐藏（分别由总览页与快捷行承担），只留器材；
-    // 结果条不显示，计数由状态行承担
+    // 分类页形态：分类/目标肌肉组隐藏（分别由总览页与筛选弹层承担），只留器材；
+    // 结果条显示分类徽章与计数
     expect(find.text('分类'), findsNothing);
     expect(find.text('目标肌肉'), findsNothing);
     expect(find.text('器材'), findsOneWidget);
-    expect(find.byType(ResultsBar), findsNothing);
+    expect(find.byType(ResultsBar), findsOneWidget);
     expect(find.text('$chestCount / 1324 个动作'), findsOneWidget);
 
     // 返回总览，再进「全部动作」→ 三组与结果条恢复
@@ -201,7 +157,7 @@ void main() {
     expect(find.text('胸部'), findsOneWidget);
   });
 
-  testWidgets('窄屏分类页：标题栏显示分类名与返回键', (tester) async {
+  testWidgets('窄屏分类页：结果条显示分类名，返回键回总览', (tester) async {
     tester.view.physicalSize = const Size(412, 915);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -210,8 +166,11 @@ void main() {
     await tester.tap(find.text('胸部'));
     await pumpFor(tester, const Duration(milliseconds: 300));
 
-    // 分类页形态：快捷行出现（胸部含 2 个肌群）
-    expect(quickChip('全部 163'), findsOneWidget);
+    // 结果条标题显示分类名 + 计数
+    expect(
+      find.descendant(of: find.byType(ResultsBar), matching: find.text('胸部')),
+      findsOneWidget,
+    );
     await tester.tap(backButton());
     // 泵 ≥800ms 等旧路由出树（与「分类页带搜索词返回主页」测试同约定）
     await pumpFor(tester, const Duration(milliseconds: 800));

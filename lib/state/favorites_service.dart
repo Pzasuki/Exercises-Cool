@@ -109,6 +109,30 @@ class FavoritesService extends ChangeNotifier {
         : [...ids, exerciseId]);
   }
 
+  /// 把动作从 [fromId] 收藏夹移动到 [toId]（源夹移除 + 目标夹加入，
+  /// 目标夹已含该动作时只做移除）。
+  void moveExercise(String fromId, String toId, String exerciseId) {
+    if (fromId == toId) return;
+    _folders = [
+      for (final f in _folders)
+        if (f.id == fromId)
+          f.copyWith(
+            exerciseIds:
+                f.exerciseIds.where((id) => id != exerciseId).toList(),
+          )
+        else if (f.id == toId)
+          f.copyWith(
+            exerciseIds: f.exerciseIds.contains(exerciseId)
+                ? f.exerciseIds
+                : [...f.exerciseIds, exerciseId],
+          )
+        else
+          f,
+    ];
+    _save();
+    notifyListeners();
+  }
+
   void _updateFolder(
       String folderId, List<String> Function(List<String>) update) {
     _folders = [

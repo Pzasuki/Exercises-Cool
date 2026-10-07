@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'app.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_service.dart';
 import 'data/models/exercise.dart';
 import 'data/repositories/exercise_repository.dart';
 import 'services/rest_alarm_service.dart';
@@ -93,6 +94,9 @@ class _ExerciseBootstrapState extends State<ExerciseBootstrap> {
               create: (_) => LibraryController(snapshot.data!),
             ),
             ChangeNotifierProvider(create: (_) => FavoritesService()),
+            ChangeNotifierProvider<ThemeService>.value(
+              value: ThemeService.instance,
+            ),
             ChangeNotifierProvider<WorkoutController>.value(
               value: _workoutController,
             ),
@@ -112,7 +116,7 @@ class _LoadingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: appTheme,
+      theme: buildAppTheme(AppColors.accent),
       home: Scaffold(
         body: Center(
           child: Column(
@@ -138,7 +142,7 @@ class _BootstrapError extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: appTheme,
+      theme: buildAppTheme(AppColors.accent),
       home: Scaffold(
         body: Center(
           child: Padding(

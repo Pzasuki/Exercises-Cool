@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/i18n/zh_terms.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
+import '../../../core/theme/app_text.dart';
 import '../../../state/library_controller.dart';
 import '../../../state/workout_controller.dart';
 import '../exercise_picker_sheet.dart';
@@ -38,15 +39,26 @@ class PlanningView extends StatelessWidget {
             ),
             Expanded(
               child: controller.session.isEmpty
-                  ? const Center(
-                      child: Text(
-                        '从收藏夹或动作库挑选动作\n每个动作可设置组数、次数与重量',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.6,
-                          color: AppColors.textSecondary,
-                        ),
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.fact_check_outlined,
+                            size: 40,
+                            color: AppColors.textTertiary,
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            '从收藏夹或动作库挑选动作\n每个动作可设置组数、次数与重量',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: AppText.fsBodySm,
+                              height: 1.6,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
                       ),
                     )
                   : ListView.builder(
@@ -68,8 +80,20 @@ class PlanningView extends StatelessWidget {
                     ),
             ),
             const RestSettingTile(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
+            // 底部操作栏：白底 + 顶部分隔线，与列表区拉开层级
+            Container(
+              decoration: const BoxDecoration(
+                color: AppColors.bgSurface,
+                border: Border(
+                  top: BorderSide(color: AppColors.border),
+                ),
+              ),
+              padding: EdgeInsets.fromLTRB(
+                14,
+                10,
+                14,
+                16 + MediaQuery.paddingOf(context).bottom,
+              ),
               child: Row(
                 children: [
                   Expanded(
@@ -106,11 +130,13 @@ class PlanningView extends StatelessWidget {
                               context.read<WorkoutController>().startSession(),
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.accent,
+                        foregroundColor: Colors.white,
                         minimumSize: const Size.fromHeight(44),
                       ),
                       child: const Text('开始',
                           style: TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w700)),
+                              fontSize: AppText.fsBody,
+                              fontWeight: FontWeight.w700)),
                     ),
                   ),
                 ],
@@ -181,7 +207,7 @@ class _PlanEntryCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 13.5,
+                          fontSize: AppText.fsBody,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textPrimary,
                         ),
@@ -190,7 +216,8 @@ class _PlanEntryCard extends StatelessWidget {
                       Text(
                         subtitle,
                         style: const TextStyle(
-                            fontSize: 11, color: AppColors.textSecondary),
+                            fontSize: AppText.fsMicro,
+                            color: AppColors.textSecondary),
                       ),
                     ],
                   ),
@@ -359,7 +386,7 @@ class _DefaultsDialogState extends State<_DefaultsDialog> {
                 );
             Navigator.pop(context, true);
           },
-          child: const Text('保存',
+          child: Text('保存',
               style: TextStyle(
                   color: AppColors.accent, fontWeight: FontWeight.w700)),
         ),

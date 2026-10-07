@@ -9,6 +9,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/i18n/zh_terms.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_text.dart';
 import '../../data/models/exercise.dart';
 import '../favorites/folder_picker_sheet.dart';
 import '../../state/favorites_service.dart';
@@ -20,6 +21,9 @@ import '../../state/favorites_service.dart';
 /// 多语言步骤页签：原版同样只接 zh（`const langs = ['zh']`），
 /// 数据加入其他语言后再在步骤区加 TabBar。
 Future<void> showExerciseDetail(BuildContext context, Exercise exercise) {
+  // 打开前释放输入焦点：从搜索结果点卡片时，避免输入法悬在弹层下、
+  // 关闭后又被拉起
+  FocusManager.instance.primaryFocus?.unfocus();
   final isWide = MediaQuery.sizeOf(context).width >= kNarrowBreakpoint;
   if (isWide) {
     return _showCenteredDialog(context, exercise);
@@ -186,12 +190,18 @@ class ExerciseDetailBody extends StatelessWidget {
     super.key,
     required this.exercise,
     this.gifMaxHeight = 240,
+    this.minimal = false,
   });
 
   final Exercise exercise;
 
   /// 动图区限高：桌面居中弹窗 320 / 弹层与执行页 240。
   final double gifMaxHeight;
+
+  /// 精简形态（训练执行页）：仅保留动图与动作步骤——做组间隙没有时间
+  /// 阅读元信息与肌群。动图在两种形态下都用白底卡片：
+  /// 插画本身是白底，白卡可与其无缝融合（训练页与详情弹窗一致）。
+  final bool minimal;
 
   @override
   Widget build(BuildContext context) {
@@ -209,50 +219,54 @@ class ExerciseDetailBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // ── .modal-media ──
-        ClipRRect(
-          borderRadius: BorderRadius.circular(AppDimens.radiusMd),
-          child: Container(
-            color: AppColors.bgElevated,
-            constraints: BoxConstraints(maxHeight: gifMaxHeight),
-            child: Image.asset(
-              ex.animationAsset,
-              fit: BoxFit.contain,
-              gaplessPlayback: true,
-              errorBuilder: (_, _, _) => SizedBox(height: gifMaxHeight),
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        // ── .modal-meta ──
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            _MetaChip(label: '部位', value: zh(ex.bodyPart)),
-            _MetaChip(label: '器材', value: zh(ex.equipment)),
-            _MetaChip(label: '目标肌肉', value: zh(ex.target)),
-          ],
-        ),
-        const SizedBox(height: 14),
-        // ── .modal-muscles（底部带分隔线）──
         Container(
-          padding: const EdgeInsets.only(bottom: 16),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: AppColors.border)),
+          constraints: BoxConstraints(maxHeight: gifMaxHeight),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+          decoration: BoxDecoration(
+            color: AppColors.bgSurface,
+            borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+            border: Border.all(color: AppColors.border),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Image.asset(
+            ex.animationAsset,
+            fit: BoxFit.contain,
+            gaplessPlayback: true,
+            errorBuilder: (_, _, _) => SizedBox(height: gifMaxHeight),
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (!minimal) ...[
+          // ── .modal-meta ──
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
-              const _SectionLabel('肌肉'),
-              const SizedBox(height: 10),
-              _MusclesGrid(
-                primary:
-                    ex.target.isEmpty ? const <String>[] : [ex.target],
-                secondary: secondary,
-              ),
+              _MetaChip(label: '部位', value: zh(ex.bodyPart)),
+              _MetaChip(label: '器材', value: zh(ex.equipment)),
+              _MetaChip(label: '目标肌肉', value: zh(ex.target)),
             ],
           ),
-        ),
+          const SizedBox(height: 14),
+          // ── .modal-muscles（底部带分隔线）──
+          Container(
+            padding: const EdgeInsets.only(bottom: 16),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: AppColors.border)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _SectionLabel('肌肉'),
+                const SizedBox(height: 10),
+                _MusclesGrid(
+                  primary:
+                      ex.target.isEmpty ? const <String>[] : [ex.target],
+                  secondary: secondary,
+                ),
+              ],
+            ),
+          ),
+        ],
         // ── .modal-instructions ──
         Padding(
           padding: const EdgeInsets.only(top: 14),
@@ -301,16 +315,24 @@ class _FavoriteButton extends StatelessWidget {
       ),
       child: InkWell(
         customBorder: const CircleBorder(),
-        // 点按 = 收进/移出「默认收藏」；长按 = 打开收藏夹选择弹层
-        onTap: () =>
-            context.read<FavoritesService>().toggleDefault(exerciseId),
+        // 点按：只有默认收藏夹时直接收进/移出；有其他收藏夹时弹层选择
+        // 去处（弹层里也可取消勾选移出）。长按 = 打开收藏夹选择弹层
+        onTap: () {
+          HapticFeedback.selectionClick();
+          final service = context.read<FavoritesService>();
+          if (service.folders.length > 1) {
+            showFavoriteFolderPicker(context, exerciseId);
+          } else {
+            service.toggleDefault(exerciseId);
+          }
+        },
         onLongPress: () => showFavoriteFolderPicker(context, exerciseId),
         child: SizedBox(
-          width: 28,
-          height: 28,
+          width: 32,
+          height: 32,
           child: Icon(
             favorited ? Icons.favorite : Icons.favorite_outline,
-            size: 15,
+            size: 17,
             color: favorited ? AppColors.accent : AppColors.textSecondary,
           ),
         ),
@@ -345,13 +367,13 @@ class _CloseButtonState extends State<_CloseButton> {
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: () => Navigator.of(context).pop(),
-          child: SizedBox(
-            width: 28,
-            height: 28,
+          child: const SizedBox(
+            width: 32,
+            height: 32,
             child: Icon(
               Icons.close,
-              size: 14,
-              color: _hover ? AppColors.accent : AppColors.textSecondary,
+              size: 16,
+              color: AppColors.textSecondary,
             ),
           ),
         ),
@@ -370,7 +392,7 @@ class _MetaChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         color: AppColors.bgElevated,
         borderRadius: BorderRadius.circular(AppDimens.radiusMd),
@@ -383,17 +405,17 @@ class _MetaChip extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: AppText.fsMicro,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.7,
               color: AppColors.textTertiary,
             ),
           ),
-          const SizedBox(height: 1),
+          const SizedBox(height: 2),
           Text(
             value,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: AppText.fsBodySm,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
             ),
@@ -411,15 +433,7 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.8,
-        color: AppColors.textTertiary,
-      ),
-    );
+    return Text(text, style: AppText.overline);
   }
 }
 
@@ -488,28 +502,20 @@ class _MuscleGroup extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppDimens.radiusMd),
         border: Border.all(color: AppColors.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.7,
-              color: AppColors.textTertiary,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: AppText.overline),
+            const SizedBox(height: 7),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final n in names) _MuscleTag(name: n, isPrimary: isPrimary),
+              ],
             ),
-          ),
-          const SizedBox(height: 7),
-          Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            children: [
-              for (final n in names) _MuscleTag(name: n, isPrimary: isPrimary),
-            ],
-          ),
-        ],
-      ),
+          ],
+        ),
     );
   }
 }

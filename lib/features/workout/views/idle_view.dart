@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
+import '../../../core/theme/app_text.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../data/models/workout.dart';
 import '../../../state/library_controller.dart';
@@ -24,36 +25,45 @@ class IdleView extends StatelessWidget {
           children: [
             const WorkoutHeader(title: '训练'),
             Expanded(
-              child: controller.templates.isEmpty && controller.history.isEmpty
-                  ? ListView(
-                      children: [
-                        const SizedBox(height: 14),
-                        _StartButton(),
-                        const _EmptyHint(
-                          text: '还没有训练模板和历史记录\n开始一次训练后可保存为模板',
-                        ),
-                      ],
-                    )
-                  : ListView(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      children: [
-                        const SizedBox(height: 14),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          child: _StartButton(),
-                        ),
-                        if (controller.templates.isNotEmpty) ...[
-                          const _SectionTitle('训练模板'),
-                          for (final t in controller.templates)
-                            _TemplateCard(template: t),
-                        ],
-                        if (controller.history.isNotEmpty) ...[
-                          const _SectionTitle('历史训练'),
-                          for (final record in controller.history)
-                            _HistoryCard(record: record),
-                        ],
-                      ],
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  16,
+                  24 + MediaQuery.paddingOf(context).bottom,
+                ),
+                children: [
+                  const _StartButton(),
+                  if (controller.templates.isEmpty &&
+                      controller.history.isEmpty) ...[
+                    const SizedBox(height: 28),
+                    // 首次使用：引导性空状态（图标 + 说明）
+                    Icon(Icons.fitness_center_rounded,
+                        size: 40, color: AppColors.textTertiary),
+                    const SizedBox(height: 12),
+                    const _EmptyHint(
+                      text: '还没有训练模板和历史记录\n开始一次训练后可保存为模板',
                     ),
+                  ] else ...[
+                    if (controller.templates.isNotEmpty) ...[
+                      _SectionHeader(
+                        title: '训练模板',
+                        trailing: '${controller.templates.length}',
+                      ),
+                      for (final t in controller.templates)
+                        _TemplateCard(template: t),
+                    ],
+                    if (controller.history.isNotEmpty) ...[
+                      _SectionHeader(
+                        title: '历史训练',
+                        trailing: '${controller.history.length}',
+                      ),
+                      for (final record in controller.history)
+                        _HistoryCard(record: record),
+                    ],
+                  ],
+                ],
+              ),
             ),
           ],
         ),
@@ -62,38 +72,59 @@ class IdleView extends StatelessWidget {
   }
 }
 
+/// 主 CTA：训练页最重要的动作，占据视觉首位。
 class _StartButton extends StatelessWidget {
+  const _StartButton();
+
   @override
   Widget build(BuildContext context) {
     return FilledButton.icon(
       onPressed: () => context.read<WorkoutController>().startPlanning(),
-      icon: const Icon(Icons.play_arrow_rounded, size: 22),
-      label: const Text('开始训练',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+      icon: const Icon(Icons.play_arrow_rounded, size: 24),
+      label: const Text(
+        '开始训练',
+        style: TextStyle(
+          fontSize: AppText.fsHeading,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
       style: FilledButton.styleFrom(
         backgroundColor: AppColors.accent,
-        minimumSize: const Size.fromHeight(48),
+        foregroundColor: Colors.white,
+        minimumSize: const Size.fromHeight(54),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimens.radiusLg),
+        ),
       ),
     );
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
+/// 分区标题：名称 + 右侧数量。
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, required this.trailing});
 
-  final String text;
+  final String title;
+  final String trailing;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 18, 14, 8),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: AppColors.textSecondary,
-        ),
+      padding: const EdgeInsets.fromLTRB(2, 24, 2, 10),
+      child: Row(
+        children: [
+          Text(title, style: AppText.sectionTitle),
+          const Spacer(),
+          Text(
+            trailing,
+            style: const TextStyle(
+              fontSize: AppText.fsCaption,
+              fontWeight: FontWeight.w600,
+              fontFeatures: AppText.tabularNums,
+              color: AppColors.textTertiary,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -106,21 +137,19 @@ class _EmptyHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 60),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontSize: 13,
-          height: 1.6,
-          color: AppColors.textSecondary,
-        ),
+    return Text(
+      text,
+      textAlign: TextAlign.center,
+      style: const TextStyle(
+        fontSize: AppText.fsBodySm,
+        height: 1.6,
+        color: AppColors.textSecondary,
       ),
     );
   }
 }
 
+/// 模板卡片：主题色图标位 + 名称 + 元信息 + 删除。
 class _TemplateCard extends StatelessWidget {
   const _TemplateCard({required this.template});
 
@@ -131,35 +160,71 @@ class _TemplateCard extends StatelessWidget {
     final t = template;
     final totalSets = t.entries.fold<int>(0, (s, e) => s + e.sets);
     return Card(
-      margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
       color: AppColors.bgSurface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppDimens.radiusMd),
         side: const BorderSide(color: AppColors.border),
       ),
-      child: ListTile(
+      child: InkWell(
         onTap: () => context.read<WorkoutController>().loadTemplate(t.id),
-        leading: const Icon(Icons.fitness_center, size: 22, color: AppColors.accent),
-        title: Text(
-          t.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
+        borderRadius: BorderRadius.circular(AppDimens.radiusMd),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.accentMuted,
+                  borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+                ),
+                child: Icon(
+                  Icons.fitness_center_rounded,
+                  size: 20,
+                  color: AppColors.accent,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      t.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: AppText.fsBody,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${t.entries.length} 个动作 · 共 $totalSets 组',
+                      style: const TextStyle(
+                        fontSize: AppText.fsCaption,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(
+                  Icons.delete_outline,
+                  size: 20,
+                  color: AppColors.textTertiary,
+                ),
+                tooltip: '删除模板',
+                onPressed: () =>
+                    context.read<WorkoutController>().deleteTemplate(t.id),
+              ),
+            ],
           ),
-        ),
-        subtitle: Text(
-          '${t.entries.length} 个动作 · 共 $totalSets 组',
-          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-        ),
-        trailing: IconButton(
-          icon: const Icon(Icons.delete_outline,
-              size: 20, color: AppColors.textTertiary),
-          onPressed: () =>
-              context.read<WorkoutController>().deleteTemplate(t.id),
         ),
       ),
     );
@@ -186,7 +251,7 @@ class _HistoryCard extends StatelessWidget {
     final library = context.watch<LibraryController>();
 
     return Card(
-      margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
       color: AppColors.bgSurface,
       shape: RoundedRectangleBorder(
@@ -196,12 +261,11 @@ class _HistoryCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-        leading: const Icon(Icons.history, size: 22, color: AppColors.textSecondary),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         title: Text(
           dateText,
           style: const TextStyle(
-            fontSize: 14,
+            fontSize: AppText.fsBody,
             fontWeight: FontWeight.w600,
             color: AppColors.textPrimary,
           ),
@@ -209,11 +273,18 @@ class _HistoryCard extends StatelessWidget {
         subtitle: Text(
           '${r.entries.length} 个动作 · 共 ${r.totalSetsDone} 组 · '
           '感受：${r.feeling} · $durationText',
-          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          style: const TextStyle(
+            fontSize: AppText.fsCaption,
+            color: AppColors.textSecondary,
+          ),
         ),
         trailing: IconButton(
-          icon: const Icon(Icons.delete_outline,
-              size: 20, color: AppColors.textTertiary),
+          icon: const Icon(
+            Icons.delete_outline,
+            size: 20,
+            color: AppColors.textTertiary,
+          ),
+          tooltip: '删除记录',
           onPressed: () => context.read<WorkoutController>().deleteRecord(r.id),
         ),
         children: [
@@ -228,7 +299,7 @@ class _HistoryCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: AppText.fsBodySm,
                         color: AppColors.textPrimary,
                       ),
                     ),
@@ -237,7 +308,8 @@ class _HistoryCard extends StatelessWidget {
                     '${e.completedSets}/${e.sets} 组 · 每组 ${e.reps} 次'
                     '${e.weight == null ? '' : ' · ${formatWeight(e.weight)}kg'}',
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: AppText.fsCaption,
+                      fontFeatures: AppText.tabularNums,
                       color: AppColors.textSecondary,
                     ),
                   ),
@@ -253,11 +325,14 @@ class _HistoryCard extends StatelessWidget {
               icon: const Icon(Icons.replay_rounded, size: 18),
               label: const Text(
                 '再练一次',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: AppText.fsBodySm,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.accent,
-                side: const BorderSide(color: AppColors.accent),
+                side: BorderSide(color: AppColors.accent),
                 minimumSize: const Size.fromHeight(40),
               ),
             ),

@@ -175,7 +175,7 @@ class _RestSettingTileState extends State<RestSettingTile>
       ),
       child: Row(
         children: [
-          const Icon(Icons.notifications_off_outlined,
+          Icon(Icons.notifications_off_outlined,
               size: 18, color: AppColors.accent),
           const SizedBox(width: 8),
           const Expanded(
@@ -188,7 +188,7 @@ class _RestSettingTileState extends State<RestSettingTile>
             onPressed: () async {
               await RestAlarmService.instance.openNotificationSettings();
             },
-            child: const Text(
+            child: Text(
               '去开启',
               style: TextStyle(
                   fontSize: 12,

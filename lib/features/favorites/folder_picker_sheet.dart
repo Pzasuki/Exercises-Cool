@@ -80,7 +80,7 @@ class _FolderPickerSheet extends StatelessWidget {
                       ),
                     ),
                     trailing: selected.contains(folder.id)
-                        ? const Icon(Icons.check, size: 18, color: AppColors.accent)
+                        ? Icon(Icons.check, size: 18, color: AppColors.accent)
                         : null,
                     onTap: () => context
                         .read<FavoritesService>()
@@ -90,8 +90,8 @@ class _FolderPickerSheet extends StatelessWidget {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.add, size: 20, color: AppColors.accent),
-            title: const Text(
+            leading: Icon(Icons.add, size: 20, color: AppColors.accent),
+            title: Text(
               '新建收藏夹',
               style: TextStyle(fontSize: 14, color: AppColors.accent),
             ),

@@ -199,16 +199,11 @@ class LibraryController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 已选中的值排到最前面，其余按全库数量降序、同数按字母序
-  /// （常用值稳定地排在前面对应 orderedValues）。
-  List<String> orderedValues(FilterKey key) {
-    final selected = filtersOf(key);
-    final all = filterValues[key] ?? const <String>[];
-    return [
-      ...all.where(selected.contains),
-      ...all.where((v) => !selected.contains(v)),
-    ];
-  }
+  /// 维度候选值顺序：分类按固定业务顺序，其余按全库数量降序、同数按
+  /// 字母序。选中不改变顺序（选择状态由芯片高亮表达，列表位置保持
+  /// 稳定，避免点选时芯片跳动）。
+  List<String> orderedValues(FilterKey key) =>
+      List.unmodifiable(filterValues[key] ?? const <String>[]);
 
   /// 当前筛选（除 [key] 维度外）下某值的 facet 计数，即点选它会得到的结果数。
   int countFor(FilterKey key, String value) =>

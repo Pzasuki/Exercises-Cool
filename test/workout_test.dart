@@ -487,7 +487,8 @@ void main() {
       expect(find.text('1:00'), findsOneWidget);
       expect(find.text('休息中…'), findsOneWidget);
 
-      // +15s / 跳过休息
+      // +15s / 跳过休息（先等休息卡展开动画结束，按钮才在可点击区域内）
+      await pumpFor(tester, const Duration(milliseconds: 300));
       await tester.tap(find.text('+15s'));
       await pumpFor(tester, const Duration(milliseconds: 50));
       expect(find.text('1:15'), findsOneWidget);
@@ -589,9 +590,10 @@ void main() {
       await pumpFor(tester, const Duration(milliseconds: 100));
       expect(find.textContaining('· 10kg'), findsOneWidget);
 
-      // 执行页按「动作详情」样式展示当前动作（动图/元信息/肌群/步骤共用正文）
-      expect(find.text('部位'), findsOneWidget);
-      expect(find.text('主要肌群'), findsOneWidget);
+      // 执行页为精简形态：仅动图与动作步骤（元信息/肌群在做组间隙
+      // 没有阅读价值，已省略）
+      expect(find.text('部位'), findsNothing);
+      expect(find.text('主要肌群'), findsNothing);
       expect(find.text('动作步骤'), findsOneWidget);
 
       // 3 组做完 → 总结；选「很累」→ 完成写入历史

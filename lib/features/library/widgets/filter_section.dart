@@ -3,13 +3,15 @@ import 'package:provider/provider.dart';
 
 import '../../../core/i18n/zh_terms.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_text.dart';
 import '../../../state/library_controller.dart';
 
-/// 筛选分区（.filter-section）：标题 + 带计数的芯片组。
-/// 数据源为 [LibraryController.orderedValues]——已选中的芯片自动排到最前，
-/// 其余按全库数量降序；芯片计数为当前 facet 计数（点选后会得到的结果数），
+/// 筛选分区（.filter-section）：标题 + 芯片组。
+/// 数据源为 [LibraryController.orderedValues]——分类按固定业务顺序、
+/// 其余按全库数量降序，选中不改变位置（由高亮表达）；
 /// 0 结果的芯片直接不显示（已选中的除外，保证可以取消）。
-/// 宽屏芯片自动换行；窄屏单行横向滚动（对应 @media 768 的 .filter-options）。
+/// 芯片不显示数量数字（facet 计数仅用于上述显隐逻辑）。
+/// 芯片为换行流布局。
 /// [initialLimit] 非空时收起态只显示前 N 个芯片，「更多」展开其余。
 class FilterSection extends StatefulWidget {
   const FilterSection({
@@ -23,7 +25,7 @@ class FilterSection extends StatefulWidget {
   final String title;
   final FilterKey filterKey;
 
-  /// 窄屏模式下芯片排成单行横向滚动（滚动条隐藏）。
+  /// true = 单行横向滚动（旧窄屏面板形态，现版面已不再传入 true）。
   final bool horizontal;
 
   /// 收起态最多显示的芯片数（已选中的始终优先显示）。
@@ -61,7 +63,6 @@ class _FilterSectionState extends State<FilterSection> {
       for (final value in shown)
         _FilterChip(
           label: zh(value),
-          count: controller.countFor(widget.filterKey, value),
           active: selected.contains(value),
           onTap: () => controller.toggleFilter(widget.filterKey, value),
         ),
@@ -76,16 +77,8 @@ class _FilterSectionState extends State<FilterSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.title,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.8,
-            color: AppColors.textSecondary,
-          ),
-        ),
-        const SizedBox(height: 6),
+        Text(widget.title, style: AppText.overline),
+        const SizedBox(height: 8),
         if (widget.horizontal)
           // 窄屏：单行横滑，隐藏滚动条（原版 ::-webkit-scrollbar display:none）
           ScrollConfiguration(
@@ -111,18 +104,16 @@ class _FilterSectionState extends State<FilterSection> {
   }
 }
 
-/// 筛选芯片（.chip / .chip.active）：胶囊形，选中为主题色，
-/// 悬停时边框加深、文字变主色；带 facet 计数。
+/// 筛选芯片（.chip / .chip.active）：软填充胶囊（无描边），选中为
+/// 主题色浅底 + 主题色文字。不显示数量数字。
 class _FilterChip extends StatefulWidget {
   const _FilterChip({
     required this.label,
-    required this.count,
     required this.active,
     required this.onTap,
   });
 
   final String label;
-  final int count;
   final bool active;
   final VoidCallback onTap;
 
@@ -140,29 +131,21 @@ class _FilterChipState extends State<_FilterChip> {
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: Material(
-        color: active ? AppColors.accentMuted : Colors.transparent,
-        shape: StadiumBorder(
-          side: BorderSide(
-            color: active
-                ? AppColors.accent
-                : (_hover ? AppColors.borderHover : AppColors.border),
-          ),
-        ),
+        color: active
+            ? AppColors.accentMuted
+            : (_hover ? AppColors.bgElevated : AppColors.bgInput),
+        shape: const StadiumBorder(),
         child: InkWell(
           onTap: widget.onTap,
           customBorder: const StadiumBorder(),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             child: Text(
-              '${widget.label} ${widget.count}',
+              widget.label,
               style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: active
-                    ? AppColors.accent
-                    : (_hover
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary),
+                fontSize: AppText.fsCaption,
+                fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                color: active ? AppColors.accent : AppColors.textPrimary,
               ),
             ),
           ),
@@ -182,20 +165,20 @@ class _MoreChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
-      shape: StadiumBorder(side: const BorderSide(color: AppColors.border)),
+      color: AppColors.bgInput,
+      shape: const StadiumBorder(),
       child: InkWell(
         onTap: onTap,
         customBorder: const StadiumBorder(),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 expanded ? '收起' : '更多',
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: AppText.fsCaption,
                   fontWeight: FontWeight.w500,
                   color: AppColors.textTertiary,
                 ),

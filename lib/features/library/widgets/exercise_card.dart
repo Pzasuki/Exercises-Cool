@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/i18n/zh_terms.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
+import '../../../core/theme/app_text.dart';
 import '../../../data/models/exercise.dart';
 import '../../detail/exercise_detail_sheet.dart';
 
@@ -110,8 +111,8 @@ class _ExerciseCardState extends State<ExerciseCard> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 12.5,
-                        height: 1.3,
+                        fontSize: AppText.fsBodySm,
+                        height: 1.35,
                         fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary,
                       ),
@@ -166,7 +167,7 @@ class _Tag extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          fontSize: 10,
+          fontSize: AppText.fsMicro,
           height: 1.2,
           fontWeight: FontWeight.w500,
           color: fg,

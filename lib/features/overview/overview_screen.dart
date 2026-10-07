@@ -5,6 +5,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/i18n/zh_terms.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_text.dart';
 import '../../data/models/exercise.dart';
 import '../../state/library_controller.dart';
 import '../library/library_screen.dart';
@@ -45,6 +46,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
   }
 
   void _openBrowse() {
+    // 进入浏览页前释放搜索焦点：浏览页工具栏有自己的搜索框，
+    // 焦点不释放会让输入法跟着路由进新页面
+    FocusManager.instance.primaryFocus?.unfocus();
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const LibraryScreen()),
     );
@@ -121,9 +125,11 @@ class _CategoryOverview extends StatelessWidget {
     // 固定业务顺序（胸→背→肩→腰腹→…），见 kCategoryDisplayOrder
     final categories = controller.categoryOrder;
 
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
     final EdgeInsets gridPadding = isCompact
-        ? const EdgeInsets.fromLTRB(10, 10, 10, 24)
-        : EdgeInsets.fromLTRB(isNarrow ? 12 : 20, 12, isNarrow ? 12 : 20, 24);
+        ? EdgeInsets.fromLTRB(10, 10, 10, 24 + bottomInset)
+        : EdgeInsets.fromLTRB(
+            isNarrow ? 12 : 20, 12, isNarrow ? 12 : 20, 24 + bottomInset);
     final SliverGridDelegate delegate = isCompact
         ? const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
@@ -146,6 +152,19 @@ class _CategoryOverview extends StatelessWidget {
             context.read<LibraryController>().clearAllFilters();
             onOpenAll();
           }),
+        ),
+        // 分区标签：与网格同一 max-width 居中，宽窄屏都对齐网格左缘
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kOverviewMaxWidth),
+            child: Padding(
+              padding: gridPadding.copyWith(top: 14, bottom: 6),
+              child: const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('按部位浏览', style: AppText.sectionTitle),
+              ),
+            ),
+          ),
         ),
         Expanded(
           child: Center(
@@ -202,7 +221,7 @@ class _AllExercisesCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.grid_view_rounded,
                 size: 20,
                 color: AppColors.accent,
@@ -317,7 +336,7 @@ class _CategoryCardState extends State<_CategoryCard> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: AppText.fsBodySm,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
                       ),
@@ -326,7 +345,7 @@ class _CategoryCardState extends State<_CategoryCard> {
                     Text(
                       '${widget.count} 个动作',
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: AppText.fsMicro,
                         color: AppColors.textSecondary,
                       ),
                     ),

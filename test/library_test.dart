@@ -104,7 +104,7 @@ void main() {
       expect(controller.filtered, hasLength(2));
     });
 
-    test('已选筛选值排到最前', () {
+    test('选中不改变候选值顺序（由高亮表达选择状态）', () {
       final controller = LibraryController([
         _ex(1, category: 'chest'),
         _ex(2, category: 'waist'),
@@ -112,11 +112,11 @@ void main() {
       ]);
 
       controller.toggleFilter(FilterKey.category, 'waist');
-      // 分类维度按固定业务顺序（kCategoryDisplayOrder）：chest 在 back 前
+      // 分类维度按固定业务顺序（kCategoryDisplayOrder），选中不置顶
       expect(controller.orderedValues(FilterKey.category), [
-        'waist',
         'chest',
         'back',
+        'waist',
       ]);
     });
 

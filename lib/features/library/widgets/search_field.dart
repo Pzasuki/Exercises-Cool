@@ -1,3 +1,5 @@
+import 'dart:ui' show FlutterView;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -19,15 +21,52 @@ class SearchField extends StatefulWidget {
   State<SearchField> createState() => _SearchFieldState();
 }
 
-class _SearchFieldState extends State<SearchField> {
+class _SearchFieldState extends State<SearchField>
+    with WidgetsBindingObserver {
   final TextEditingController _textController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
 
+  /// 本输入框所在视图（didChangeDependencies 时缓存，供观察器读取）。
+  FlutterView? _view;
+
+  /// 上一时刻键盘是否可见，用于识别「键盘已收起但焦点仍在」的时刻。
+  bool _keyboardVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _view = View.of(context);
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _textController.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    final view = _view;
+    if (view == null) return;
+    // 注意不能用 widget 树的 MediaQuery 判断：Scaffold
+    // （resizeToAvoidBottomInset）会把 body 内的 viewInsets 清零，
+    // 必须读视图的原始 insets。
+    final visible = view.viewInsets.bottom > 0;
+    // 系统返回/收起键只会隐藏键盘、不会清掉焦点；焦点悬空时，之后切
+    // Tab、开弹层、返回等任意操作都会把输入法再拉起来。这里在
+    // 「键盘可见 → 不可见」的跳变时刻主动释放焦点。
+    if (_keyboardVisible && !visible && _focusNode.hasFocus) {
+      _focusNode.unfocus();
+    }
+    _keyboardVisible = visible;
   }
 
   @override

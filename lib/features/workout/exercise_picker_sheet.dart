@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/i18n/zh_terms.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_text.dart';
 import '../../data/models/exercise.dart';
 import '../../state/favorites_service.dart';
 import '../../state/library_controller.dart';
@@ -16,8 +17,9 @@ Future<List<String>?> showExercisePicker(BuildContext context) {
     isScrollControlled: true,
     backgroundColor: AppColors.bgSurface,
     shape: const RoundedRectangleBorder(
-      borderRadius:
-          BorderRadius.vertical(top: Radius.circular(AppDimens.radiusXl)),
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppDimens.radiusXl),
+      ),
     ),
     constraints: BoxConstraints(
       maxHeight: MediaQuery.sizeOf(context).height * 0.88,
@@ -69,14 +71,8 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
           ),
           Flexible(
             child: _tab == 0
-                ? _FavoritePickerTab(
-                    selected: _selected,
-                    onToggle: _toggle,
-                  )
-                : _SearchPickerTab(
-                    selected: _selected,
-                    onToggle: _toggle,
-                  ),
+                ? _FavoritePickerTab(selected: _selected, onToggle: _toggle)
+                : _SearchPickerTab(selected: _selected, onToggle: _toggle),
           ),
           // 底部批量添加
           Padding(
@@ -93,7 +89,9 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
               child: Text(
                 _selected.isEmpty ? '选择要添加的动作' : '添加 ${_selected.length} 个动作',
                 style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w700),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),
@@ -108,10 +106,7 @@ typedef _SelectionCallback = void Function(String exerciseId);
 
 /// 收藏页签：横滑选择收藏夹，夹内动作以卡片网格展示。
 class _FavoritePickerTab extends StatelessWidget {
-  const _FavoritePickerTab({
-    required this.selected,
-    required this.onToggle,
-  });
+  const _FavoritePickerTab({required this.selected, required this.onToggle});
 
   final Set<String> selected;
   final _SelectionCallback onToggle;
@@ -120,16 +115,18 @@ class _FavoritePickerTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final service = context.watch<FavoritesService>();
     final library = context.watch<LibraryController>();
-    final folders =
-        service.folders.where((f) => f.exerciseIds.isNotEmpty).toList();
+    final folders = service.folders
+        .where((f) => f.exerciseIds.isNotEmpty)
+        .toList();
     if (folders.isEmpty) {
       return const _PickerHint(text: '还没有收藏动作\n去动作库打开动作详情，点收藏试试');
     }
     final folderId = folders.first.id;
     final exercises = [
-      for (final id in service.folders
-          .where((f) => f.id == folderId)
-          .expand((f) => f.exerciseIds))
+      for (final id
+          in service.folders
+              .where((f) => f.id == folderId)
+              .expand((f) => f.exerciseIds))
         ?library.byId(id),
     ];
 
@@ -186,10 +183,7 @@ class _FavoritePickerTab extends StatelessWidget {
 /// 二级：该器材内按**部位**分组的模块（胸部/背部/…）。
 /// 搜索框在两级都可用：总览级搜全库，器材级只搜该器材。
 class _SearchPickerTab extends StatefulWidget {
-  const _SearchPickerTab({
-    required this.selected,
-    required this.onToggle,
-  });
+  const _SearchPickerTab({required this.selected, required this.onToggle});
 
   final Set<String> selected;
   final _SelectionCallback onToggle;
@@ -226,63 +220,80 @@ class _SearchPickerTabState extends State<_SearchPickerTab> {
               if (e.category == _categoryFilter) e,
           ];
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_equipment != null)
-          _CategoryHeader(
-            name: zh(_equipment!),
-            count: scoped.length,
-            onBack: () => setState(() {
-              _equipment = null;
-              _query = '';
-            }),
-          ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-          child: TextField(
-            key: const Key('exercisePickerSearch'),
-            onChanged: (v) => setState(() => _query = v),
-            decoration: const InputDecoration(
-              hintText: '搜索动作…',
-              prefixIcon: Icon(Icons.search, size: 18),
-              isDense: true,
+    // 系统返回键分级退出：器材二级页 → 先回器材总览（等同左上角返回）；
+    // 已在器材总览 → 才关闭整个弹层。切到收藏页签后本组件卸载、
+    // 二级页状态复位，返回键此时直接关弹层。
+    return PopScope(
+      canPop: _equipment == null,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          setState(() {
+            _equipment = null;
+            _query = '';
+          });
+        }
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_equipment != null)
+            _CategoryHeader(
+              name: zh(_equipment!),
+              count: scoped.length,
+              onBack: () => setState(() {
+                _equipment = null;
+                _query = '';
+              }),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: TextField(
+              key: const Key('exercisePickerSearch'),
+              onChanged: (v) => setState(() => _query = v),
+              decoration: const InputDecoration(
+                hintText: '搜索动作…',
+                prefixIcon: Icon(Icons.search, size: 18),
+                isDense: true,
+              ),
             ),
           ),
-        ),
-        // 部位筛选 chips（两级通用；0 结果的芯片隐藏，已选中的保留）
-        SizedBox(
-          height: 40,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            children: [
-              _CategoryChip(
-                label: '全部 ${all.length}',
-                selected: _categoryFilter == null,
-                onTap: () => setState(() => _categoryFilter = null),
-              ),
-              for (final cat in library.categoryOrder)
-                if (_categoryFilter == cat ||
-                    all.any((e) => e.category == cat)) ...[
-                  const SizedBox(width: 6),
-                  _CategoryChip(
-                    label:
-                        '${zh(cat)} ${all.where((e) => e.category == cat).length}',
-                    selected: _categoryFilter == cat,
-                    onTap: () => setState(() => _categoryFilter = cat),
-                  ),
-                ],
-            ],
+          // 部位筛选 chips（两级通用；0 结果的芯片隐藏，已选中的保留）
+          SizedBox(
+            height: 40,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              children: [
+                _CategoryChip(
+                  label: '全部 ${all.length}',
+                  selected: _categoryFilter == null,
+                  onTap: () => setState(() => _categoryFilter = null),
+                ),
+                for (final cat in library.categoryOrder)
+                  if (_categoryFilter == cat ||
+                      all.any((e) => e.category == cat)) ...[
+                    const SizedBox(width: 6),
+                    _CategoryChip(
+                      label:
+                          '${zh(cat)} ${all.where((e) => e.category == cat).length}',
+                      selected: _categoryFilter == cat,
+                      onTap: () => setState(() => _categoryFilter = cat),
+                    ),
+                  ],
+              ],
+            ),
           ),
-        ),
-        Flexible(child: _buildContent(library, q, scoped)),
-      ],
+          Flexible(child: _buildContent(library, q, scoped)),
+        ],
+      ),
     );
   }
 
   Widget _buildContent(
-      LibraryController library, String q, List<Exercise> scoped) {
+    LibraryController library,
+    String q,
+    List<Exercise> scoped,
+  ) {
     // 搜索优先：有输入时直接展示结果网格（忽略器材分组）
     if (q.isNotEmpty) {
       final results = scoped
@@ -334,8 +345,9 @@ class _SearchPickerTabState extends State<_SearchPickerTab> {
     // 二级：按部位分组的模块（固定业务顺序；部位筛选后只剩选中的组）
     final sections = <(String, List<Exercise>)>[];
     for (final cat in library.categoryOrder) {
-      final list =
-          scoped.where((e) => e.category == cat).toList(growable: false);
+      final list = scoped
+          .where((e) => e.category == cat)
+          .toList(growable: false);
       if (list.isNotEmpty) sections.add((cat, list));
     }
     if (sections.isEmpty) return const _PickerHint(text: '未找到相关动作');
@@ -398,7 +410,7 @@ class _CategoryHeader extends StatelessWidget {
           Text(
             '$name · $count 个动作',
             style: const TextStyle(
-              fontSize: 15,
+              fontSize: AppText.fsHeading,
               fontWeight: FontWeight.w800,
               color: AppColors.textPrimary,
             ),
@@ -460,7 +472,7 @@ class _PickerCategoryCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 12.5,
+                      fontSize: AppText.fsBodySm,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textPrimary,
                     ),
@@ -469,7 +481,7 @@ class _PickerCategoryCard extends StatelessWidget {
                   Text(
                     '$count 个动作',
                     style: const TextStyle(
-                      fontSize: 10.5,
+                      fontSize: AppText.fsMicro,
                       color: AppColors.textSecondary,
                     ),
                   ),
@@ -575,12 +587,15 @@ class _PickCard extends StatelessWidget {
                       child: Container(
                         width: 22,
                         height: 22,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           color: AppColors.accent,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.check,
-                            size: 15, color: Colors.white),
+                        child: const Icon(
+                          Icons.check,
+                          size: 15,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                 ],
@@ -597,7 +612,7 @@ class _PickCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 12.5,
+                      fontSize: AppText.fsBodySm,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary,
                     ),
@@ -608,7 +623,7 @@ class _PickCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 10.5,
+                      fontSize: AppText.fsMicro,
                       color: AppColors.textSecondary,
                     ),
                   ),
@@ -645,9 +660,7 @@ class _CategoryChip extends StatelessWidget {
         color: selected ? AppColors.accent : AppColors.textSecondary,
       ),
       selectedColor: AppColors.accentMuted,
-      side: BorderSide(
-        color: selected ? AppColors.accent : AppColors.border,
-      ),
+      side: BorderSide(color: selected ? AppColors.accent : AppColors.border),
       showCheckmark: false,
       visualDensity: VisualDensity.compact,
     );

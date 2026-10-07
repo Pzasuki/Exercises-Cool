@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_text.dart';
 import '../../../core/utils/formatters.dart';
 
 /// 小号图标按钮（紧凑点击区，避免行溢出）。
@@ -69,8 +70,9 @@ class NumberStepper extends StatelessWidget {
             '$value',
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: AppText.fsBody,
               fontWeight: FontWeight.w700,
+              fontFeatures: AppText.tabularNums,
               color: AppColors.textPrimary,
             ),
           ),
@@ -116,8 +118,9 @@ class WeightStepper extends StatelessWidget {
             w == null ? '未设置' : '${formatWeight(w)}kg',
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 12.5,
+              fontSize: AppText.fsBodySm,
               fontWeight: FontWeight.w700,
+              fontFeatures: AppText.tabularNums,
               color: w == null ? AppColors.textTertiary : AppColors.textPrimary,
             ),
           ),

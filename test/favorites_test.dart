@@ -84,6 +84,32 @@ void main() {
       );
     });
 
+    test('移动动作到其他收藏夹', () async {
+      final service = FavoritesService();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      final f1 = service.createFolder('夹A');
+      final f2 = service.createFolder('夹B');
+      service.addToFolder(f1, 'e1');
+
+      service.moveExercise(f1, f2, 'e1');
+      expect(service.folderIdsOf('e1'), <String>{f2});
+      expect(
+        service.folders.where((f) => f.id == f1).single.exerciseIds,
+        isEmpty,
+      );
+
+      // 目标夹已含该动作：源夹移除、目标夹不重复
+      service.addToFolder(f2, 'e2');
+      service.addToFolder(f1, 'e2');
+      service.moveExercise(f1, f2, 'e2');
+      expect(service.folderIdsOf('e2'), <String>{f2});
+      expect(
+        service.folders.where((f) => f.id == f2).single.exerciseIds,
+        ['e1', 'e2'],
+      );
+    });
+
     test('持久化：重建服务后数据还原', () async {
       final service = FavoritesService();
       await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -167,6 +193,114 @@ void main() {
       await tester.tap(find.byIcon(Icons.close));
       await pumpFor(tester, const Duration(milliseconds: 100));
       expect(find.textContaining('收藏夹还是空的'), findsOneWidget);
+    });
+
+    testWidgets('多收藏夹时点收藏：弹出收藏夹选择（不静默加默认）', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await pumpApp(tester, await loadExercises(tester));
+
+      // 先建一个非默认收藏夹
+      await tester.tap(find.text('收藏'));
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      await tester.tap(find.byIcon(Icons.create_new_folder_outlined));
+      await pumpFor(tester, const Duration(milliseconds: 200));
+      await tester.enterText(
+        find.descendant(
+            of: find.byType(AlertDialog), matching: find.byType(TextField)),
+        '测试夹',
+      );
+      await tester.tap(find.text('确定'));
+      await pumpFor(tester, const Duration(milliseconds: 200));
+
+      // 打开动作详情，点收藏 → 弹出选择弹层（而非直接进默认收藏）
+      await tester.tap(find.text('动作库'));
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      await enterBrowse(tester);
+      await tester.tap(find.text('四分之三仰卧起坐'));
+      await pumpFor(tester, const Duration(milliseconds: 300));
+      await tester.tap(find.byIcon(Icons.favorite_outline));
+      await pumpFor(tester, const Duration(milliseconds: 300));
+      expect(find.text('收藏到收藏夹'), findsOneWidget);
+      expect(find.byIcon(Icons.favorite), findsNothing);
+
+      // 弹层里勾选「默认收藏」→ 收藏生效
+      await tester.tap(find.text('默认收藏'));
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      expect(find.byIcon(Icons.favorite), findsNWidgets(2)); // 详情按钮 + 弹层行
+
+      // 点遮罩关闭弹层 → 关闭详情 → 收藏 Tab 验证
+      await tester.tapAt(const Offset(30, 100));
+      await pumpFor(tester, const Duration(milliseconds: 300));
+      await tester.tap(find.byIcon(Icons.close));
+      await pumpFor(tester, const Duration(milliseconds: 400));
+      await tester.tap(backButton());
+      await pumpFor(tester, const Duration(milliseconds: 400));
+      await tester.tap(find.text('收藏'));
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      expect(find.text('1 个动作'), findsOneWidget); // 仅默认收藏含该动作
+    });
+
+    testWidgets('收藏夹内移动动作到其他收藏夹', (tester) async {
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await pumpApp(tester, await loadExercises(tester));
+
+      // 准备：新建「测试夹」；收藏动作（多夹存在 → 弹层里勾选默认收藏）
+      await tester.tap(find.text('收藏'));
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      await tester.tap(find.byIcon(Icons.create_new_folder_outlined));
+      await pumpFor(tester, const Duration(milliseconds: 200));
+      await tester.enterText(
+        find.descendant(
+            of: find.byType(AlertDialog), matching: find.byType(TextField)),
+        '测试夹',
+      );
+      await tester.tap(find.text('确定'));
+      await pumpFor(tester, const Duration(milliseconds: 200));
+
+      await tester.tap(find.text('动作库'));
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      await enterBrowse(tester);
+      await tester.tap(find.text('四分之三仰卧起坐'));
+      await pumpFor(tester, const Duration(milliseconds: 300));
+      await tester.tap(find.byIcon(Icons.favorite_outline));
+      await pumpFor(tester, const Duration(milliseconds: 300));
+      await tester.tap(find.text('默认收藏'));
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      await tester.tapAt(const Offset(30, 100));
+      await pumpFor(tester, const Duration(milliseconds: 300));
+      await tester.tap(find.byIcon(Icons.close));
+      await pumpFor(tester, const Duration(milliseconds: 400));
+      // 返回总览（浏览页没有底部导航），再切收藏 Tab
+      await tester.tap(backButton());
+      await pumpFor(tester, const Duration(milliseconds: 400));
+
+      // 进「默认收藏」夹内页：动作条目带移动入口
+      await tester.tap(find.text('收藏'));
+      await pumpFor(tester, const Duration(milliseconds: 100));
+      await tester.tap(find.text('默认收藏'));
+      await pumpFor(tester, const Duration(milliseconds: 300));
+      expect(find.text('四分之三仰卧起坐'), findsOneWidget);
+
+      // 点移动 → 弹层选「测试夹」→ 从当前夹消失
+      await tester.tap(find.byIcon(Icons.drive_file_move_outlined));
+      await pumpFor(tester, const Duration(milliseconds: 300));
+      expect(find.text('移动到其他收藏夹'), findsOneWidget);
+      await tester.tap(find.text('测试夹'));
+      await pumpFor(tester, const Duration(milliseconds: 300));
+      expect(find.textContaining('收藏夹还是空的'), findsOneWidget);
+
+      // 「测试夹」内可见该动作
+      await tester.tap(backButton());
+      await pumpFor(tester, const Duration(milliseconds: 300));
+      await tester.tap(find.text('测试夹'));
+      await pumpFor(tester, const Duration(milliseconds: 300));
+      expect(find.text('四分之三仰卧起坐'), findsOneWidget);
     });
   });
 }

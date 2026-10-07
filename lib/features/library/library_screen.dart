@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants/app_constants.dart';
-import '../../core/i18n/zh_terms.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_dimens.dart';
+import '../../core/theme/app_text.dart';
 import '../../state/library_controller.dart';
 import 'widgets/filter_panel.dart';
+import 'widgets/filter_sheet.dart';
 import 'widgets/results_view.dart';
+import 'widgets/search_field.dart';
 
 /// 分类浏览页（两级浏览的二级）：宽屏「侧栏 + 结果视图」，
-/// 窄屏「返回标题栏 + 可折叠面板（max-height 45vh）+ 结果视图」。
-/// 从总览页带着分类筛选进入；结果条、目标肌群快捷行与网格见 ResultsView。
+/// 窄屏「返回 + 搜索 + 筛选按钮」工具栏 + 结果视图——筛选收进
+/// 底部弹层（[showFilterSheet]），网格占满全屏；已选条件由结果条
+/// （ResultsBar 窄屏单行形态）承担。从总览页带着分类筛选进入。
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
 
@@ -21,38 +22,12 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
-  static const String _prefKeyCollapsed = 'sidebarCollapsed';
-
   final ScrollController _scrollController = ScrollController();
-
-  /// 窄屏下顶部筛选面板是否展开（对应 .sidebar.collapsed 的折叠逻辑）。
-  bool _panelOpen = true;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _restorePanelState();
-  }
-
-  /// 恢复窄屏面板折叠状态（对应原版 localStorage['sidebarCollapsed']）。
-  /// 原版写入 collapsed='1'、启动却检查 '0'，等于永远回到展开——这里按正确语义存取。
-  Future<void> _restorePanelState() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (!mounted) return;
-      setState(() => _panelOpen = prefs.getString(_prefKeyCollapsed) != '1');
-    } catch (_) {
-      // 存储不可用（如测试环境未注册插件）时保持默认展开
-    }
-  }
-
-  Future<void> _togglePanel() async {
-    setState(() => _panelOpen = !_panelOpen);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_prefKeyCollapsed, _panelOpen ? '0' : '1');
-    } catch (_) {}
   }
 
   @override
@@ -96,32 +71,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
             );
           }
 
-          // 移动布局：返回标题栏 + 可折叠筛选面板 + 内容区
+          // 移动布局：工具栏（返回 + 搜索 + 筛选入口）+ 结果视图
           return Scaffold(
             body: SafeArea(
-              child: LayoutBuilder(
-                builder: (context, inner) => Column(
-                  children: [
-                    _NarrowHeader(
-                      expanded: _panelOpen,
-                      onToggle: _togglePanel,
-                    ),
-                    if (_panelOpen)
-                      Container(
-                        constraints: BoxConstraints(
-                          maxHeight: inner.maxHeight * 0.45,
-                        ),
-                        decoration: const BoxDecoration(
-                          color: AppColors.bgSurface,
-                          border: Border(
-                            bottom: BorderSide(color: AppColors.border),
-                          ),
-                        ),
-                        child: const FilterPanel(),
-                      ),
-                    Expanded(child: content),
-                  ],
-                ),
+              child: Column(
+                children: [
+                  _NarrowHeader(onOpenFilter: () => showFilterSheet(context)),
+                  Expanded(child: content),
+                ],
               ),
             ),
           );
@@ -131,22 +88,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 }
 
-/// 窄屏顶栏：返回总览 + 当前分类标题 + 筛选折叠按钮
-/// （对应移动端 .sidebar-header 与 .sidebar-toggle-btn，按钮带已选数量徽章）。
+/// 窄屏工具栏：返回总览 + 搜索框 + 筛选按钮（带已选数量徽章）。
 class _NarrowHeader extends StatelessWidget {
-  const _NarrowHeader({required this.expanded, required this.onToggle});
+  const _NarrowHeader({required this.onOpenFilter});
 
-  final bool expanded;
-  final VoidCallback onToggle;
+  final VoidCallback onOpenFilter;
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<LibraryController>();
-    final title = controller.hasSingleCategory
-        ? zh(controller.currentCategory)
-        : '全部动作';
+    final filterCount = context.select<LibraryController, int>(
+      (c) => c.activeFilterCount,
+    );
     return Container(
-      padding: const EdgeInsets.fromLTRB(6, 6, 14, 6),
+      padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
       decoration: const BoxDecoration(
         color: AppColors.bgSurface,
         border: Border(bottom: BorderSide(color: AppColors.border)),
@@ -160,78 +114,61 @@ class _NarrowHeader extends StatelessWidget {
               size: 20,
               color: AppColors.textSecondary,
             ),
-            splashRadius: 20,
           ),
-          Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-          _ToggleChip(
-            count: controller.activeFilterCount,
-            expanded: expanded,
-            onTap: onToggle,
-          ),
+          const Expanded(child: SearchField()),
+          const SizedBox(width: 8),
+          _FilterButton(count: filterCount, onTap: onOpenFilter),
         ],
       ),
     );
   }
 }
 
-/// 「筛选」折叠按钮（.sidebar-toggle-btn）：文字 + 数量徽章 + 旋转箭头。
-/// 收起时箭头转向右侧（对应 .sidebar.collapsed 的 chevron 旋转）。
-class _ToggleChip extends StatelessWidget {
-  const _ToggleChip({
-    required this.count,
-    required this.expanded,
-    required this.onTap,
-  });
+/// 「筛选」入口：图标 + 文字 + 已选数量徽章（无选中时徽章隐藏）。
+class _FilterButton extends StatelessWidget {
+  const _FilterButton({required this.count, required this.onTap});
 
   final int count;
-  final bool expanded;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final active = count > 0;
     return Material(
-      color: AppColors.bgElevated,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-        side: const BorderSide(color: AppColors.border),
+      color: active ? AppColors.accentMuted : AppColors.bgElevated,
+      shape: StadiumBorder(
+        side: BorderSide(color: active ? AppColors.accent : AppColors.border),
       ),
       child: InkWell(
         onTap: onTap,
-        customBorder: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-        ),
+        customBorder: const StadiumBorder(),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Icon(
+                Icons.tune_rounded,
+                size: 16,
+                color: active ? AppColors.accent : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              Text(
                 '筛选',
                 style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
+                  fontSize: AppText.fsCaption,
+                  fontWeight: FontWeight.w600,
+                  color: active ? AppColors.accent : AppColors.textSecondary,
                 ),
               ),
-              if (count > 0) ...[
-                const SizedBox(width: 6),
+              if (active) ...[
+                const SizedBox(width: 5),
                 Container(
                   constraints: const BoxConstraints(minWidth: 15),
                   height: 15,
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   alignment: Alignment.center,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: AppColors.accent,
                     borderRadius: BorderRadius.all(Radius.circular(999)),
                   ),
@@ -246,16 +183,6 @@ class _ToggleChip extends StatelessWidget {
                   ),
                 ),
               ],
-              const SizedBox(width: 4),
-              AnimatedRotation(
-                turns: expanded ? 0 : -0.25,
-                duration: const Duration(milliseconds: 200),
-                child: const Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 14,
-                  color: AppColors.textSecondary,
-                ),
-              ),
             ],
           ),
         ),

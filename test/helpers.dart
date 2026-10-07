@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:exercises_app/app.dart';
+import 'package:exercises_app/core/theme/theme_service.dart';
 import 'package:exercises_app/data/models/exercise.dart';
 import 'package:exercises_app/features/library/widgets/filter_panel.dart';
 import 'package:exercises_app/state/favorites_service.dart';
@@ -33,6 +34,7 @@ Future<void> pumpApp(WidgetTester tester, List<Exercise> exercises) async {
         ChangeNotifierProvider(create: (_) => LibraryController(exercises)),
         ChangeNotifierProvider(create: (_) => FavoritesService()),
         ChangeNotifierProvider(create: (_) => WorkoutController()),
+        ChangeNotifierProvider<ThemeService>.value(value: ThemeService.instance),
       ],
       child: const ExercisesApp(),
     ),

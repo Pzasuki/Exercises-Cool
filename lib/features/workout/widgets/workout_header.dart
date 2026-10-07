@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_text.dart';
 
 /// 训练各视图共用的顶栏：标题 + 右侧动作区。
 class WorkoutHeader extends StatelessWidget {
@@ -19,14 +20,7 @@ class WorkoutHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-            ),
-          ),
+          Text(title, style: AppText.pageTitle),
           const Spacer(),
           ...?actions,
         ],

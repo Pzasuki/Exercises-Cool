@@ -37,15 +37,15 @@ void main() {
     await pumpFor(tester, const Duration(milliseconds: 100));
     expect(find.text('$chestCount / 1324 个动作'), findsOneWidget);
 
-    // 选中分类后进入分类页形态：结果条不显示（徽章与标题重复），
-    // 侧栏只剩器材；返回总览退出
-    expect(find.byType(ResultsBar), findsNothing);
+    // 选中分类后进入分类页形态：侧栏只剩器材；
+    // 结果条保留（分类徽章可移除 + 计数）；返回总览退出
+    expect(find.byType(ResultsBar), findsOneWidget);
     await tester.tap(backButton());
     await pumpFor(tester, const Duration(milliseconds: 300));
     expect(find.text('全部动作'), findsOneWidget);
   });
 
-  testWidgets('窄屏：筛选按钮出现已选数量徽章', (tester) async {
+  testWidgets('窄屏：筛选弹层选分类后，入口徽章与快捷行计数更新', (tester) async {
     tester.view.physicalSize = const Size(412, 915);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -57,11 +57,22 @@ void main() {
     await enterBrowse(tester);
     expect(find.text('筛选'), findsOneWidget);
 
-    // 窄屏分类芯片为单行横滑，「胸部」按固定业务顺序是首屏第一个芯片
-    await tester.tap(panelChip('胸部'));
+    // 打开筛选弹层，点分类芯片「胸部」（芯片文本带计数，用 textContaining 匹配）
+    await tester.tap(find.text('筛选'));
+    await pumpFor(tester, const Duration(milliseconds: 400));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(FilterSection),
+        matching: find.textContaining('胸部'),
+      ),
+    );
     await pumpFor(tester, const Duration(milliseconds: 100));
 
-    expect(find.text('1'), findsOneWidget);
+    // 「完成」关闭弹层（选择已即时生效）
+    await tester.tap(find.text('完成'));
+    await pumpFor(tester, const Duration(milliseconds: 400));
+
+    expect(find.text('1'), findsOneWidget); // 筛选按钮已选角标
     expect(find.text('$chestCount / 1324 个动作'), findsOneWidget);
   });
 
